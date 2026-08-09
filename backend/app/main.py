@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -9,9 +10,14 @@ from app.core.config import settings
 
 app = FastAPI(title="Plataforma Finca Raíz + Motor de Crédito", version="0.1.0")
 
+_origins = ["http://localhost:3000"]
+_extra = os.getenv("CORS_ORIGINS", "")
+if _extra:
+    _origins += [o.strip() for o in _extra.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
