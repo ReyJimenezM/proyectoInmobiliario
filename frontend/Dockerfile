@@ -7,13 +7,15 @@ RUN npm install
 
 COPY frontend .
 
-# NEXT_PUBLIC_* debe estar disponible en build time: Next.js lo inlinea en el bundle
-# del navegador durante `next build`, no lo lee en runtime como las demás env vars.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Build with a placeholder that gets replaced at runtime
+ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
 
 RUN npm run build
 
+COPY frontend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 3000
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npm", "start"]
