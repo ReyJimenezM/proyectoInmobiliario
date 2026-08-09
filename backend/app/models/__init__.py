@@ -4,6 +4,7 @@ from app.models.usuario import Usuario
 from app.models.anunciante import Anunciante
 from app.models.propietario import Propietario
 from app.models.propiedad import Propiedad, ImagenPropiedad
+from app.models.proyecto import Proyecto
 from app.models.politica_credito import PoliticaCredito
 from app.models.solicitud import Solicitud
 from app.models.documento_solicitud import DocumentoSolicitud
@@ -21,6 +22,7 @@ __all__ = [
     "Propietario",
     "Propiedad",
     "ImagenPropiedad",
+    "Proyecto",
     "PoliticaCredito",
     "Solicitud",
     "DocumentoSolicitud",

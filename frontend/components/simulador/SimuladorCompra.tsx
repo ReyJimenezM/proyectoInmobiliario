@@ -9,9 +9,11 @@ import { Semaforo } from "./Semaforo";
 export function SimuladorCompra({
   propiedadId,
   precioInicial,
+  onResult,
 }: {
   propiedadId?: string;
   precioInicial: number;
+  onResult?: (result: SimuladorCompraOutput, contexto: { precio: number; cuotaInicial: number }) => void;
 }) {
   const [precio, setPrecio] = useState(precioInicial);
   const [cuotaInicialPct, setCuotaInicialPct] = useState(20);
@@ -41,6 +43,7 @@ export function SimuladorCompra({
         plazo_anios: plazo,
       });
       setResultado(res);
+      onResult?.(res, { precio, cuotaInicial: cuotaInicialValor });
     } catch {
       setError("No pudimos calcular tu simulación. Intenta de nuevo.");
     } finally {

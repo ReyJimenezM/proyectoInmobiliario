@@ -15,6 +15,7 @@ from app.models import (
     Propietario,
     Propiedad,
     ImagenPropiedad,
+    Proyecto,
     PoliticaCredito,
     Solicitud,
     DocumentoSolicitud,
@@ -46,11 +47,24 @@ UNSPLASH_IDS = [
     "1598928506311-c55ded91a20c", "1599423300746-b62533397364", "1613977257363-707ba9348227",
     "1580587771525-78b9dba3b914", "1571939228382-b2f2b585ce15", "1615529182904-14819c35db37",
     "1522708323590-d24dbb6b0267", "1449844908441-8829872d2607",
+    # -- ampliacion para dar mas variedad visual al catalogo de 40 propiedades --
+    "1502005229762-cf1b2da7c5d6", "1494526585095-c41746248156", "1505843513577-22bb7d21e455",
+    "1512918728675-ed5a9ecdebfd", "1523758576459-8ba22e6b8b90", "1531835551805-16d864c8d311",
+    "1554995207-c18c203602cb", "1560184897-ae75f418493e", "1570129477492-45c003edd2be",
+    "1576941089067-2de3c901e126", "1583608205776-bfd35f0d9f83", "1600566753086-00f18fb6b3ea",
+    "1600607688969-a5bfcd646154", "1605276374104-dee2a0ed3cd6", "1613490493576-7fde63acd811",
 ]
 
 
 def img_url(seed_id: str, w: int = 1200, h: int = 800) -> str:
     return f"https://images.unsplash.com/photo-{seed_id}?w={w}&h={h}&fit=crop"
+
+
+PROYECTO_UNSPLASH_IDS = [
+    "1600585154526-990dced4db0d", "1600566752355-35792bedcfea", "1600607687920-4e2a09cf159d",
+    "1512917774080-9991f1c4c750", "1523192193543-6e7296d960e4", "1580587771525-78b9dba3b914",
+    "1494526585095-c41746248156", "1554995207-c18c203602cb",
+]
 
 
 # Cada banda incluye una `condicion` legible por motor_decision.reglas.evaluar_banda:
@@ -152,6 +166,14 @@ def run(db: Session) -> None:
                    telefono_contacto="3151112233", email="mfosorio@gmail.com", inmobiliaria_id=DEFAULT_TENANT_ID),
         Anunciante(id=uuid.uuid4(), tipo=TipoAnunciante.inmobiliaria, nombre="Zona Urbana Propiedades",
                    telefono_contacto="6053456123", email="info@zonaurbana.co", inmobiliaria_id=DEFAULT_TENANT_ID),
+        Anunciante(id=uuid.uuid4(), tipo=TipoAnunciante.inmobiliaria, nombre="Inmobiliaria Elite",
+                   telefono_contacto="6017778899", email="contacto@inmobiliariaelite.co", inmobiliaria_id=DEFAULT_TENANT_ID),
+        Anunciante(id=uuid.uuid4(), tipo=TipoAnunciante.constructora, nombre="Constructora Andes",
+                   telefono_contacto="6044456789", email="ventas@constructoraandes.co", inmobiliaria_id=DEFAULT_TENANT_ID),
+        Anunciante(id=uuid.uuid4(), tipo=TipoAnunciante.inmobiliaria, nombre="Grupo Valor",
+                   telefono_contacto="6076543210", email="info@grupovalor.co", inmobiliaria_id=DEFAULT_TENANT_ID),
+        Anunciante(id=uuid.uuid4(), tipo=TipoAnunciante.inmobiliaria, nombre="Finca Raíz Premium",
+                   telefono_contacto="6018889900", email="contacto@fincaraizpremium.co", inmobiliaria_id=DEFAULT_TENANT_ID),
     ]
     db.add_all(anunciantes)
     db.flush()
@@ -176,6 +198,30 @@ def run(db: Session) -> None:
          {"titularidad": 92, "juridica": 90, "documentacion": 85, "identidad": 100, "fraude": 92, "historial": 85, "cumplimiento": 90}),
         ("Carlos Eduardo Mejía", "PA", "AB1234567", "carlos.mejia@yahoo.com", "3126665544", "Medellín",
          {"titularidad": 25, "juridica": 20, "documentacion": 30, "identidad": 40, "fraude": 20, "historial": 15, "cumplimiento": 25}),
+        ("Inmobiliaria Elite", "NIT", "901.345.678-2", "contacto@inmobiliariaelite.co", "6017778899", "Bogotá",
+         {"titularidad": 93, "juridica": 91, "documentacion": 90, "identidad": 100, "fraude": 94, "historial": 88, "cumplimiento": 92}),
+        ("Constructora Andes", "NIT", "900.456.789-3", "ventas@constructoraandes.co", "6044456789", "Medellín",
+         {"titularidad": 88, "juridica": 84, "documentacion": 86, "identidad": 100, "fraude": 85, "historial": 78, "cumplimiento": 87}),
+        ("Grupo Valor", "NIT", "901.567.890-4", "info@grupovalor.co", "6076543210", "Barranquilla",
+         {"titularidad": 72, "juridica": 68, "documentacion": 70, "identidad": 90, "fraude": 74, "historial": 60, "cumplimiento": 65}),
+        ("Finca Raíz Premium", "NIT", "900.678.901-5", "contacto@fincaraizpremium.co", "6018889900", "Bogotá",
+         {"titularidad": 80, "juridica": 78, "documentacion": 75, "identidad": 95, "fraude": 82, "historial": 70, "cumplimiento": 76}),
+        ("Ricardo Alfonso Vargas", "CC", "80.123.456", "ricardo.vargas@gmail.com", "3112223344", "Bucaramanga",
+         {"titularidad": 65, "juridica": 60, "documentacion": 62, "identidad": 80, "fraude": 68, "historial": 55, "cumplimiento": 58}),
+        ("Diana Carolina Muñoz", "CC", "52.987.654", "diana.munoz@hotmail.com", "3145556677", "Santa Marta",
+         {"titularidad": 55, "juridica": 50, "documentacion": 48, "identidad": 70, "fraude": 60, "historial": 42, "cumplimiento": 50}),
+        ("Fernando José Castro", "CC", "91.234.567", "fernando.castro@yahoo.com", "3167778899", "Pereira",
+         {"titularidad": 40, "juridica": 35, "documentacion": 38, "identidad": 55, "fraude": 45, "historial": 28, "cumplimiento": 33}),
+        ("Patricia Elena Gómez", "CC", "41.876.543", "patricia.gomez@gmail.com", "3178889900", "Manizales",
+         {"titularidad": 78, "juridica": 75, "documentacion": 72, "identidad": 92, "fraude": 80, "historial": 65, "cumplimiento": 74}),
+        ("Sandra Milena Herrera", "CE", "E-2345678", "sandra.herrera@outlook.com", "3189990011", "Bogotá",
+         {"titularidad": 30, "juridica": 28, "documentacion": 25, "identidad": 45, "fraude": 35, "historial": 20, "cumplimiento": 30}),
+        ("Julián Andrés Restrepo", "CC", "71.345.678", "julian.restrepo@gmail.com", "3201112233", "Medellín",
+         {"titularidad": 98, "juridica": 95, "documentacion": 96, "identidad": 100, "fraude": 97, "historial": 90, "cumplimiento": 95}),
+        ("Camila Andrea Torres", "CC", "63.456.789", "camila.torres@hotmail.com", "3212223344", "Cali",
+         {"titularidad": 50, "juridica": 45, "documentacion": 47, "identidad": 65, "fraude": 55, "historial": 38, "cumplimiento": 44}),
+        ("Grupo Habitar S.A.S.", "NIT", "901.789.012-6", "info@grupohabitar.co", "6053334455", "Cartagena",
+         {"titularidad": 85, "juridica": 82, "documentacion": 80, "identidad": 98, "fraude": 86, "historial": 72, "cumplimiento": 80}),
     ]
     propietarios = []
     for nombre, tipo_doc, documento, email, telefono, ciudad, componentes in propietarios_datos:
@@ -195,30 +241,69 @@ def run(db: Session) -> None:
         ("Cali", ["Ciudad Jardín", "Granada"]),
         ("Barranquilla", ["El Prado", "Alto Prado"]),
         ("Cartagena", ["Bocagrande", "Manga"]),
+        ("Bucaramanga", ["Cabecera", "Cañaveral"]),
+        ("Santa Marta", ["El Rodadero", "Bello Horizonte"]),
+        ("Pereira", ["Pinares", "Circunvalar"]),
+        ("Manizales", ["Palermo", "Cable"]),
     ]
-    tipos = [TipoPropiedad.apartamento, TipoPropiedad.casa, TipoPropiedad.apartaestudio,
-             TipoPropiedad.oficina, TipoPropiedad.local]
+    # Ciclo ponderado: apartamento/casa siguen siendo los mas comunes, pero oficina, local,
+    # lote y bodega aparecen con mas frecuencia que en el seed original (donde bodega/lote
+    # ni siquiera existian).
+    tipos_ciclo = [
+        TipoPropiedad.apartamento, TipoPropiedad.casa, TipoPropiedad.apartamento, TipoPropiedad.oficina,
+        TipoPropiedad.apartaestudio, TipoPropiedad.local, TipoPropiedad.casa, TipoPropiedad.bodega,
+        TipoPropiedad.apartamento, TipoPropiedad.lote, TipoPropiedad.oficina, TipoPropiedad.casa,
+        TipoPropiedad.apartaestudio, TipoPropiedad.bodega,
+    ]
+    caracteristicas = [
+        "piscina", "gimnasio", "terraza panorámica", "chimenea", "zona de BBQ",
+        "seguridad 24/7 con circuito cerrado", "jardín privado", "walk-in closet",
+        "cocina integral tipo isla", "balcón con vista a la ciudad", "salón social",
+        "cancha múltiple", "aires acondicionados en todas las habitaciones",
+        "domótica integrada", "vista panorámica a las montañas", "cuarto útil",
+        "sistema de paneles solares", "acceso controlado con portería", "estudio independiente",
+        "zonas verdes comunes",
+    ]
 
     propiedades = []
-    for i in range(18):
+    for i in range(40):
         ciudad, barrios = ciudades[i % len(ciudades)]
         barrio = barrios[i % len(barrios)]
+        tipo = tipos_ciclo[i % len(tipos_ciclo)]
         operacion = OperacionPropiedad.venta if i % 3 != 0 else OperacionPropiedad.arriendo
-        tipo = tipos[i % len(tipos)]
-        area = 45 + (i * 7) % 180
-        habitaciones = 1 + (i % 4)
-        precio = (
-            float(180_000_000 + (i * 23_000_000) % 650_000_000)
-            if operacion == OperacionPropiedad.venta
-            else float(1_200_000 + (i * 180_000) % 5_500_000)
-        )
+
+        # Areas por tipo: apartaestudio compacto, casas campestres/bodegas amplias, resto general.
+        if tipo == TipoPropiedad.apartaestudio:
+            area = 30 + (i * 3) % 25  # 30 - 55 m2
+        elif tipo in (TipoPropiedad.bodega, TipoPropiedad.lote):
+            area = 200 + (i * 23) % 300  # 200 - 500 m2
+        elif tipo == TipoPropiedad.casa and i % 4 == 0:
+            area = 220 + (i * 11) % 280  # casas campestres amplias
+        else:
+            area = 45 + (i * 13) % 175  # 45 - 220 m2
+        area = min(area, 500)
+
+        habitaciones = 0 if tipo in (TipoPropiedad.lote, TipoPropiedad.bodega, TipoPropiedad.oficina, TipoPropiedad.local) else 1 + (i % 5)
+        estrato = 1 + (i % 6)
+
+        if operacion == OperacionPropiedad.venta:
+            precio = float(85_000_000 + (i * 53_000_000) % 1_115_000_000)
+        else:
+            precio = float(800_000 + (i * 730_000) % 11_200_000)
+
+        feat_a = caracteristicas[i % len(caracteristicas)]
+        feat_b = caracteristicas[(i * 5 + 3) % len(caracteristicas)]
+
         prop = Propiedad(
             id=uuid.uuid4(),
             titulo=f"{tipo.value.capitalize()} en {barrio}, {ciudad}",
             descripcion=(
-                f"{tipo.value.capitalize()} de {area} m² ubicado en {barrio}, {ciudad}. "
-                "Excelente iluminación natural, acabados de alta calidad, cerca a zonas "
-                "comerciales y transporte público. Ideal para familias o profesionales."
+                f"{tipo.value.capitalize()} de {area} m² ubicado en {barrio}, {ciudad}, con {feat_a} "
+                f"y {feat_b}. Excelente iluminación natural, acabados de alta calidad, cerca a zonas "
+                "comerciales y transporte público. Ideal para "
+                + ("empresas y emprendedores." if tipo in (TipoPropiedad.oficina, TipoPropiedad.local, TipoPropiedad.bodega)
+                   else "inversión y desarrollo." if tipo == TipoPropiedad.lote
+                   else "familias o profesionales.")
             ),
             tipo=tipo,
             operacion=operacion,
@@ -226,13 +311,13 @@ def run(db: Session) -> None:
             valor_admin=float(150_000 + (i * 15_000) % 400_000) if tipo == TipoPropiedad.apartamento else None,
             area_m2=float(area),
             habitaciones=habitaciones,
-            banos=max(1, habitaciones - 1),
-            parqueaderos=i % 3,
+            banos=max(1, habitaciones - 1) if habitaciones else (1 if tipo in (TipoPropiedad.oficina, TipoPropiedad.local) else 0),
+            parqueaderos=i % 4,
             ciudad=ciudad,
             zona=barrio,
             barrio=barrio,
             direccion=f"Calle {10 + i} # {20 + i}-{30 + i}",
-            estrato=2 + (i % 5),
+            estrato=estrato,
             anunciante_id=anunciantes[i % len(anunciantes)].id,
             inmobiliaria_id=DEFAULT_TENANT_ID,
             simulador_activo=(i % 5 != 4),
@@ -248,6 +333,117 @@ def run(db: Session) -> None:
                 id=uuid.uuid4(), propiedad_id=prop.id,
                 url=img_url(UNSPLASH_IDS[(i * 3 + j) % len(UNSPLASH_IDS)]), orden=j,
             ))
+
+    # --- proyectos (nuevos desarrollos, no son unidades individuales) ---
+    proyectos_datos = [
+        dict(
+            nombre="Torres del Parque Central", constructora="Constructora Andes",
+            ciudad="Bogotá", zona="Chapinero", tipo=TipoPropiedad.apartamento,
+            precio_desde=380_000_000, precio_hasta=720_000_000, area_desde=52, area_hasta=110,
+            habitaciones_desde=1, habitaciones_hasta=3, fecha_entrega="Q2 2027", estado="preventa",
+            descripcion=(
+                "Desarrollo de torres residenciales en el corazón de Chapinero, con vista panorámica "
+                "a los cerros orientales y acceso directo a las principales vías de la ciudad."
+            ),
+            amenidades=["Piscina", "Gimnasio", "Zonas verdes", "Parqueadero cubierto", "Salón comunal", "Juegos infantiles"],
+            financiacion_directa=True, subsidio_aplicable=False,
+        ),
+        dict(
+            nombre="Reserva del Bosque", constructora="Constructora Andes",
+            ciudad="Medellín", zona="El Poblado", tipo=TipoPropiedad.casa,
+            precio_desde=850_000_000, precio_hasta=1_200_000_000, area_desde=220, area_hasta=380,
+            habitaciones_desde=3, habitaciones_hasta=5, fecha_entrega="Q4 2027", estado="preventa",
+            descripcion=(
+                "Conjunto cerrado de casas campestres rodeado de naturaleza en El Poblado, con "
+                "senderos ecológicos y diseño arquitectónico contemporáneo."
+            ),
+            amenidades=["Piscina", "Gimnasio", "Zonas verdes", "Senderos ecológicos", "Salón comunal", "Zona BBQ", "Seguridad 24/7"],
+            financiacion_directa=True, subsidio_aplicable=False,
+        ),
+        dict(
+            nombre="Mirador del Caribe", constructora="Habitat Inmobiliaria",
+            ciudad="Cartagena", zona="Bocagrande", tipo=TipoPropiedad.apartamento,
+            precio_desde=290_000_000, precio_hasta=550_000_000, area_desde=60, area_hasta=130,
+            habitaciones_desde=2, habitaciones_hasta=3, fecha_entrega="Inmediata", estado="entrega_inmediata",
+            descripcion=(
+                "Torre frente al mar en Bocagrande con apartamentos listos para entrega inmediata, "
+                "vista panorámica al Caribe y acabados de lujo."
+            ),
+            amenidades=["Piscina", "Gimnasio", "Terraza panorámica", "Salón social", "Parqueadero cubierto", "Seguridad 24/7"],
+            financiacion_directa=False, subsidio_aplicable=False,
+        ),
+        dict(
+            nombre="Cittá Living", constructora="Grupo Valor",
+            ciudad="Bogotá", zona="Usaquén", tipo=TipoPropiedad.apartaestudio,
+            precio_desde=180_000_000, precio_hasta=280_000_000, area_desde=28, area_hasta=48,
+            habitaciones_desde=1, habitaciones_hasta=1, fecha_entrega="Q1 2027", estado="en_construccion",
+            descripcion=(
+                "Apartaestudios inteligentes en Usaquén, pensados para jóvenes profesionales, "
+                "con espacios optimizados y coworking en el primer piso."
+            ),
+            amenidades=["Gimnasio", "Coworking", "Zona BBQ", "Domótica", "Seguridad 24/7"],
+            financiacion_directa=True, subsidio_aplicable=True,
+        ),
+        dict(
+            nombre="Eco Village", constructora="Finca Raíz Premium",
+            ciudad="Cali", zona="Ciudad Jardín", tipo=TipoPropiedad.casa,
+            precio_desde=650_000_000, precio_hasta=950_000_000, area_desde=180, area_hasta=300,
+            habitaciones_desde=3, habitaciones_hasta=4, fecha_entrega="Q3 2028", estado="preventa",
+            descripcion=(
+                "Proyecto de vivienda sostenible con paneles solares y sistemas de recolección "
+                "de aguas lluvias, en una de las zonas más verdes de Cali."
+            ),
+            amenidades=["Zonas verdes", "Paneles solares", "Piscina", "Salón comunal", "Cancha múltiple", "Juegos infantiles"],
+            financiacion_directa=False, subsidio_aplicable=True,
+        ),
+        dict(
+            nombre="Sky Towers", constructora="Inmobiliaria Elite",
+            ciudad="Barranquilla", zona="Alto Prado", tipo=TipoPropiedad.apartamento,
+            precio_desde=320_000_000, precio_hasta=480_000_000, area_desde=65, area_hasta=105,
+            habitaciones_desde=2, habitaciones_hasta=3, fecha_entrega="Q2 2027", estado="en_construccion",
+            descripcion=(
+                "Torres de altura en Alto Prado con vista a la ciudad, gimnasio panorámico y "
+                "terraza con zona social en el último piso."
+            ),
+            amenidades=["Piscina", "Gimnasio", "Terraza panorámica", "Salón social", "Parqueadero cubierto"],
+            financiacion_directa=True, subsidio_aplicable=False,
+        ),
+        dict(
+            nombre="Montaña Viva", constructora="Constructora Andes",
+            ciudad="Pereira", zona="Pinares", tipo=TipoPropiedad.casa,
+            precio_desde=420_000_000, precio_hasta=680_000_000, area_desde=160, area_hasta=260,
+            habitaciones_desde=3, habitaciones_hasta=4, fecha_entrega="Q1 2028", estado="preventa",
+            descripcion=(
+                "Casas de montaña en Pinares con chimenea, vista panorámica al valle del "
+                "Otún y diseño bioclimático."
+            ),
+            amenidades=["Chimenea", "Zonas verdes", "Senderos ecológicos", "Salón comunal", "Zona BBQ", "Vista panorámica"],
+            financiacion_directa=True, subsidio_aplicable=False,
+        ),
+        dict(
+            nombre="Playa Dorada", constructora="Habitat Inmobiliaria",
+            ciudad="Santa Marta", zona="El Rodadero", tipo=TipoPropiedad.apartamento,
+            precio_desde=250_000_000, precio_hasta=450_000_000, area_desde=55, area_hasta=95,
+            habitaciones_desde=1, habitaciones_hasta=3, fecha_entrega="Inmediata", estado="entrega_inmediata",
+            descripcion=(
+                "Apartamentos frente a la playa en El Rodadero, listos para entrega inmediata, "
+                "ideales para vivienda vacacional o renta turística."
+            ),
+            amenidades=["Piscina", "Terraza panorámica", "Gimnasio", "Salón social", "Seguridad 24/7", "Parqueadero cubierto"],
+            financiacion_directa=False, subsidio_aplicable=False,
+        ),
+    ]
+    for idx, pdata in enumerate(proyectos_datos):
+        imagenes = [
+            img_url(PROYECTO_UNSPLASH_IDS[(idx + k) % len(PROYECTO_UNSPLASH_IDS)])
+            for k in range(3)
+        ]
+        db.add(Proyecto(
+            id=uuid.uuid4(), inmobiliaria_id=DEFAULT_TENANT_ID,
+            imagen_url=imagenes[0], imagenes=imagenes, activo=True,
+            **pdata,
+        ))
+    db.flush()
 
     # --- politicas de credito v1 ---
     politica_compra = PoliticaCredito(
@@ -292,6 +488,18 @@ def run(db: Session) -> None:
              decision=None, nombre="Sandra Milena Torres"),
         dict(estado=EstadoSolicitud.enviada, vertical=Vertical.arriendo, score=None,
              decision=None, nombre="Felipe Castaño"),
+        # -- ampliacion: mas variedad de estados para que el dashboard y los reportes
+        # tengan mas volumen y distribucion realista --
+        dict(estado=EstadoSolicitud.con_ruta_alterna, vertical=Vertical.arriendo, score=48.0,
+             decision=DecisionEvaluacion.revision_manual, nombre="Mónica Alejandra Rueda"),
+        dict(estado=EstadoSolicitud.con_ruta_alterna, vertical=Vertical.compra, score=55.5,
+             decision=DecisionEvaluacion.revision_manual, nombre="Camilo Ernesto Duarte"),
+        dict(estado=EstadoSolicitud.borrador, vertical=Vertical.compra, score=None,
+             decision=None, nombre="Natalia Andrea Prieto"),
+        dict(estado=EstadoSolicitud.enviada, vertical=Vertical.compra, score=None,
+             decision=None, nombre="Óscar Iván Beltrán"),
+        dict(estado=EstadoSolicitud.enviada, vertical=Vertical.arriendo, score=None,
+             decision=None, nombre="Valentina Zapata"),
     ]
 
     for idx, ej in enumerate(ejemplos):

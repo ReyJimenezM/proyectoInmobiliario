@@ -14,6 +14,7 @@ from app.api import (
     motor,
     propiedades,
     propietarios,
+    proyectos,
     simulador,
     solicitudes,
 )
@@ -50,6 +51,8 @@ app.include_router(inmobiliarias.router)
 app.include_router(inmobiliarias.router_publico)
 app.include_router(motor.router)
 app.include_router(auditoria.router)
+app.include_router(proyectos.router)
+app.include_router(proyectos.router_admin)
 
 
 @app.get("/api/health")

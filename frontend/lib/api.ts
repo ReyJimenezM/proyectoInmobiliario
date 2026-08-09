@@ -107,6 +107,19 @@ export async function simularArriendo(input: SimuladorArriendoInput): Promise<Si
   });
 }
 
+// --- Proyectos nuevos ---
+export function listarProyectos(filtros?: { ciudad?: string; tipo?: string }): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (filtros?.ciudad) params.set("ciudad", filtros.ciudad);
+  if (filtros?.tipo) params.set("tipo", filtros.tipo);
+  const qs = params.toString();
+  return fetchJson<any[]>(`/api/proyectos${qs ? `?${qs}` : ""}`, { cache: "no-store" });
+}
+
+export function obtenerProyecto(id: string): Promise<any> {
+  return fetchJson<any>(`/api/proyectos/${id}`, { cache: "no-store" });
+}
+
 // --- Autenticación ---
 export function registrarUsuario(input: RegistroInput): Promise<TokenOutput> {
   return fetchJson<TokenOutput>("/api/auth/registro", { method: "POST", body: JSON.stringify(input) });

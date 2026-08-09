@@ -4,7 +4,7 @@ import { AuthStatus } from "./AuthStatus";
 const ENLACES_MENU = [
   { href: "/venta/apartamento/bogota", label: "Comprar" },
   { href: "/arriendo/apartamento/bogota", label: "Arrendar" },
-  { href: "/proyectos-nuevos", label: "Proyectos nuevos" },
+  { href: "/proyectos", label: "Proyectos" },
   { href: "/simulador", label: "Simulador" },
   { href: "/blog", label: "Blog" },
 ];

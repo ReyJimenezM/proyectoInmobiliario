@@ -224,6 +224,7 @@ const NAV_SECTIONS: NavSection[] = [
     header: "Riesgo",
     items: [
       { href: "/admin/motor", label: "Motor de decisión", icon: IconCpu, roles: null },
+      { href: "/admin/motor/visual", label: "Motor visual", icon: IconGrid, roles: null },
       { href: "/admin/politicas", label: "Políticas de crédito (5C)", icon: IconScales, roles: null },
     ],
   },
@@ -247,6 +248,7 @@ const LABEL_MAP: Record<string, string> = {
   admin: "Inicio",
   pipeline: "Pipeline",
   motor: "Motor de decisión",
+  visual: "Vista visual",
   politicas: "Políticas de crédito",
   propiedades: "Propiedades",
   anunciantes: "Anunciantes",
