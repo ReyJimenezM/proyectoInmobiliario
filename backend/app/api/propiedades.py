@@ -130,15 +130,21 @@ def crear_propiedad(
     usuario: Usuario = Depends(requiere_analista_o_admin),
     db: Session = Depends(get_db),
 ) -> Propiedad:
-    if usuario.inmobiliaria_id is None:
-        raise HTTPException(403, "Tu usuario no está asociado a ninguna inmobiliaria")
-
     anunciante = db.get(Anunciante, payload.anunciante_id)
-    if anunciante is None or anunciante.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(422, "El anunciante no existe o no pertenece a tu inmobiliaria")
+    if anunciante is None:
+        raise HTTPException(422, "El anunciante no existe")
+
+    if usuario.rol == RolUsuario.super_admin:
+        inmobiliaria_id = anunciante.inmobiliaria_id
+    elif usuario.inmobiliaria_id is None:
+        raise HTTPException(403, "Tu usuario no está asociado a ninguna inmobiliaria")
+    else:
+        if anunciante.inmobiliaria_id != usuario.inmobiliaria_id:
+            raise HTTPException(422, "El anunciante no pertenece a tu inmobiliaria")
+        inmobiliaria_id = usuario.inmobiliaria_id
 
     datos = payload.model_dump(exclude={"imagenes"})
-    propiedad = Propiedad(id=uuid.uuid4(), inmobiliaria_id=usuario.inmobiliaria_id, **datos)
+    propiedad = Propiedad(id=uuid.uuid4(), inmobiliaria_id=inmobiliaria_id, **datos)
     db.add(propiedad)
     db.flush()
 
