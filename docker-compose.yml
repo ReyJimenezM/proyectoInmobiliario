@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fincaraiz
+      POSTGRES_PASSWORD: fincaraiz
+      POSTGRES_DB: fincaraiz
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fincaraiz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://fincaraiz:fincaraiz@db:5432/fincaraiz
+      JWT_SECRET_KEY: dev-secret-change-in-production
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_PATH: /app/storage/documentos
+      STORAGE_PUBLIC_PATH: /app/storage/propiedades
+      PUBLIC_BASE_URL: http://localhost:8000
+      TASA_REFERENCIAL_EA_DEFAULT: "0.12"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage/documentos:/app/storage/documentos
+      - ./storage/propiedades:/app/storage/propiedades
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # Usado por el servidor de Next.js (SSR) dentro del contenedor, via la red interna
+      # de docker-compose. El navegador del usuario usa NEXT_PUBLIC_API_URL (localhost),
+      # inlineado en build time -- ver frontend/Dockerfile y frontend/lib/api.ts.
+      API_INTERNAL_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  db_data:

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+node_modules/
+.next/
+storage/documentos/*
+!storage/documentos/.gitkeep
+*.egg-info/
+.pytest_cache/
+.claude/

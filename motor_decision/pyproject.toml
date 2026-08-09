@@ -1,0 +1,13 @@
+[project]
+name = "motor_decision"
+version = "0.1.0"
+description = "Motor de estudio de credito - modulo aislado, funciones puras, desplegable como microservicio independiente"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["motor_decision*"]

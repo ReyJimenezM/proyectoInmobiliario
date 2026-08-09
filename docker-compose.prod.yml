@@ -1,0 +1,63 @@
+# docker-compose.prod.yml
+# Uso: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Variables de entorno requeridas en el host (o en archivo .env):
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+#   JWT_SECRET_KEY
+#   PUBLIC_BASE_URL          (ej: https://api.tudominio.com)
+#   CORS_ORIGINS             (ej: https://tudominio.com)
+#   NEXT_PUBLIC_API_URL      (ej: https://api.tudominio.com)
+
+services:
+  db:
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports: []  # No exponer el puerto de la BD en produccion
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_PATH: /app/storage/documentos
+      STORAGE_PUBLIC_PATH: /app/storage/propiedades
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      TASA_REFERENCIAL_EA_DEFAULT: ${TASA_REFERENCIAL_EA_DEFAULT:-0.12}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    restart: always
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    environment:
+      API_INTERNAL_URL: http://backend:8000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

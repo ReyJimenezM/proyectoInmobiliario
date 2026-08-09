@@ -1,0 +1,63 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  },
+  "services": {
+    "db": {
+      "image": "postgres:16-alpine",
+      "variables": {
+        "POSTGRES_USER": "${{POSTGRES_USER}}",
+        "POSTGRES_PASSWORD": "${{POSTGRES_PASSWORD}}",
+        "POSTGRES_DB": "${{POSTGRES_DB}}"
+      },
+      "volumes": {
+        "/var/lib/postgresql/data": "db_data"
+      },
+      "deploy": {
+        "healthcheckPath": null,
+        "restartPolicyType": "ON_FAILURE"
+      }
+    },
+    "backend": {
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "backend/Dockerfile"
+      },
+      "variables": {
+        "DATABASE_URL": "postgresql+psycopg2://${{db.POSTGRES_USER}}:${{db.POSTGRES_PASSWORD}}@${{db.RAILWAY_PRIVATE_DOMAIN}}:5432/${{db.POSTGRES_DB}}",
+        "JWT_SECRET_KEY": "${{JWT_SECRET_KEY}}",
+        "STORAGE_BACKEND": "local",
+        "STORAGE_LOCAL_PATH": "/app/storage/documentos",
+        "STORAGE_PUBLIC_PATH": "/app/storage/propiedades",
+        "PUBLIC_BASE_URL": "${{RAILWAY_PUBLIC_DOMAIN_VALUE}}",
+        "TASA_REFERENCIAL_EA_DEFAULT": "0.12"
+      },
+      "deploy": {
+        "healthcheckPath": "/docs",
+        "restartPolicyType": "ON_FAILURE"
+      }
+    },
+    "frontend": {
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "frontend/Dockerfile",
+        "buildArgs": {
+          "NEXT_PUBLIC_API_URL": "${{backend.RAILWAY_PUBLIC_DOMAIN_VALUE}}"
+        }
+      },
+      "variables": {
+        "API_INTERNAL_URL": "http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:8000"
+      },
+      "deploy": {
+        "healthcheckPath": "/",
+        "restartPolicyType": "ON_FAILURE"
+      }
+    }
+  }
+}
