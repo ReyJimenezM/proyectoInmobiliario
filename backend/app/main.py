@@ -5,7 +5,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auditoria, auth, documentos, inmobiliarias, motor, propiedades, simulador, solicitudes
+from app.api import (
+    admin,
+    auditoria,
+    auth,
+    documentos,
+    inmobiliarias,
+    motor,
+    propiedades,
+    propietarios,
+    simulador,
+    solicitudes,
+)
 from app.core.config import settings
 
 app = FastAPI(title="Plataforma Finca Raíz + Motor de Crédito", version="0.1.0")
@@ -34,6 +45,7 @@ app.include_router(simulador.router)
 app.include_router(solicitudes.router)
 app.include_router(documentos.router)
 app.include_router(admin.router)
+app.include_router(propietarios.router)
 app.include_router(inmobiliarias.router)
 app.include_router(inmobiliarias.router_publico)
 app.include_router(motor.router)

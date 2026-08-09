@@ -5,13 +5,13 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, requiere_staff
 from app.db.session import get_db
 from app.models.documento_solicitud import DocumentoSolicitud
 from app.models.enums import EstadoDocumento, RolUsuario
 from app.models.solicitud import Solicitud
 from app.models.usuario import Usuario
-from app.schemas.solicitud import DocumentoOut
+from app.schemas.solicitud import DocumentoOut, RevisionDocumentoIn
 from app.services.auditoria import registrar
 from app.services.storage import ArchivoInvalidoError, get_storage_backend
 
@@ -81,3 +81,35 @@ def descargar_documento(
     storage = get_storage_backend()
     contenido = storage.leer(documento.url_archivo)
     return Response(content=contenido, media_type="application/octet-stream")
+
+
+@router.patch("/{documento_id}/revision", response_model=DocumentoOut)
+def revisar_documento(
+    solicitud_id: uuid.UUID,
+    documento_id: uuid.UUID,
+    payload: RevisionDocumentoIn,
+    usuario: Usuario = Depends(requiere_staff),
+    db: Session = Depends(get_db),
+) -> DocumentoSolicitud:
+    solicitud = db.get(Solicitud, solicitud_id)
+    if solicitud is None:
+        raise HTTPException(404, "Solicitud no encontrada")
+    if usuario.rol != RolUsuario.super_admin and solicitud.inmobiliaria_id != usuario.inmobiliaria_id:
+        raise HTTPException(403, "Esta solicitud no pertenece a tu inmobiliaria")
+
+    documento = db.get(DocumentoSolicitud, documento_id)
+    if documento is None or documento.solicitud_id != solicitud_id:
+        raise HTTPException(404, "Documento no encontrado")
+
+    estado_anterior = documento.estado.value
+    documento.estado = EstadoDocumento.aprobado if payload.estado == "aprobado" else EstadoDocumento.rechazado
+
+    registrar(
+        db, entidad_tipo="documento_solicitud", entidad_id=documento.id, accion="documento_revisado",
+        actor_id=usuario.id,
+        payload_antes={"estado": estado_anterior},
+        payload_despues={"estado": documento.estado.value, "comentario": payload.comentario},
+    )
+    db.commit()
+    db.refresh(documento)
+    return documento

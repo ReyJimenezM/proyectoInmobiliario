@@ -177,3 +177,42 @@ class SolicitudOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ConsultarEstadoIn(BaseModel):
+    codigo: str
+    documento: str
+
+
+class EventoTimelineOut(BaseModel):
+    fecha: datetime
+    titulo: str
+    descripcion: str
+    estado: str
+
+
+class ConsultarEstadoOut(BaseModel):
+    estado: EstadoSolicitud
+    fecha_creacion: datetime
+    fecha_actuacion: datetime | None
+    timeline: list[EventoTimelineOut]
+
+
+class ComentarioIn(BaseModel):
+    texto: str = Field(min_length=1)
+
+
+class ComentarioOut(BaseModel):
+    id: uuid.UUID
+    solicitud_id: uuid.UUID
+    usuario_id: uuid.UUID
+    texto: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RevisionDocumentoIn(BaseModel):
+    estado: Literal["aprobado", "rechazado"]
+    comentario: str | None = None

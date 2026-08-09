@@ -10,10 +10,30 @@ import { guardarSesion } from "@/lib/auth";
 /*  Demo users                                                         */
 /* ------------------------------------------------------------------ */
 const DEMO_USERS = [
-  { label: "superadmin", email: "superadmin@fincaraiz-demo.co", password: "SuperAdmin123!" },
-  { label: "admin",      email: "admin@fincaraiz-demo.co",      password: "Admin123!" },
-  { label: "asesor",     email: "asesor@fincaraiz-demo.co",     password: "Asesor123!" },
-  { label: "solicitante", email: "solicitante@fincaraiz-demo.co", password: "Demo123!" },
+  {
+    label: "superadmin",
+    email: "superadmin@fincaraiz-demo.co",
+    password: "SuperAdmin123!",
+    descripcion: "Gestiona todas las inmobiliarias de la plataforma",
+  },
+  {
+    label: "admin",
+    email: "admin@fincaraiz-demo.co",
+    password: "Admin123!",
+    descripcion: "Administra una inmobiliaria: motor, políticas y usuarios",
+  },
+  {
+    label: "asesor",
+    email: "asesor@fincaraiz-demo.co",
+    password: "Asesor123!",
+    descripcion: "Da seguimiento a solicitudes y toma decisiones de riesgo",
+  },
+  {
+    label: "solicitante",
+    email: "solicitante@fincaraiz-demo.co",
+    password: "Demo123!",
+    descripcion: "Aplica a un crédito o arriendo desde el portal público",
+  },
 ] as const;
 
 /* ------------------------------------------------------------------ */
@@ -48,6 +68,33 @@ const FEATURES = [
       </svg>
     ),
   },
+  {
+    title: "Motor de decisión con 34 reglas",
+    description: "Reglas de escala y ajuste organizadas en 6 grupos: capacidad, estabilidad, endeudamiento, verificabilidad, historial y antifraude.",
+    icon: (
+      <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Scoring de propietarios e inmuebles",
+    description: "Cada anunciante y cada propiedad reciben un score de riesgo propio, con sus componentes desglosados.",
+    icon: (
+      <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21" />
+      </svg>
+    ),
+  },
+  {
+    title: "Match Risk automático",
+    description: "Cruza el riesgo del solicitante con el del inmueble y el anunciante para anticipar fricciones antes de firmar.",
+    icon: (
+      <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9h18" />
+      </svg>
+    ),
+  },
 ] as const;
 
 /* ================================================================== */
@@ -73,6 +120,8 @@ function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [recordarDispositivo, setRecordarDispositivo] = useState(false);
+  const [avisoOlvide, setAvisoOlvide] = useState(false);
 
   /* ---- submit ---------------------------------------------------- */
   async function enviar(e: React.FormEvent) {
@@ -191,15 +240,39 @@ function LoginScreen() {
               </div>
             </div>
 
-            {/* Forgot password link */}
-            <div className="flex justify-end">
-              <Link
-                href="/recuperar-password"
+            {/* Remember device + forgot password */}
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs text-ink-600">
+                <input
+                  type="checkbox"
+                  checked={recordarDispositivo}
+                  onChange={(e) => setRecordarDispositivo(e.target.checked)}
+                  className="h-4 w-4 rounded border-ink-300 text-clay-600 focus:ring-clay-600/30"
+                />
+                Recordar este dispositivo
+              </label>
+              <button
+                type="button"
+                onClick={() => setAvisoOlvide(true)}
                 className="text-xs font-medium text-clay-600 hover:text-clay-700 transition"
               >
                 ¿Olvidaste tu contrasena?
-              </Link>
+              </button>
             </div>
+
+            {avisoOlvide && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-sm text-sky-700">
+                <span>Contacta al administrador de tu inmobiliaria para restablecer tu contrasena.</span>
+                <button
+                  type="button"
+                  onClick={() => setAvisoOlvide(false)}
+                  className="shrink-0 text-sky-500 hover:text-sky-700"
+                  aria-label="Cerrar aviso"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -295,15 +368,21 @@ function LoginScreen() {
           <p className="text-xs font-semibold uppercase tracking-wide text-white/50">
             Usuarios de demostracion
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 space-y-2">
             {DEMO_USERS.map((u) => (
               <button
                 key={u.label}
                 type="button"
                 onClick={() => rellenarDemo(u)}
-                className="rounded-lg border border-white/15 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-white/20 hover:border-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-white/15 bg-white/10 px-3.5 py-2 text-left transition hover:bg-white/20 hover:border-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
               >
-                {u.label}
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-white">{u.label}</span>
+                  <span className="block truncate text-[11px] leading-relaxed text-white/50">{u.descripcion}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/70">
+                  usar
+                </span>
               </button>
             ))}
           </div>

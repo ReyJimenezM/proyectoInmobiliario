@@ -107,6 +107,31 @@ function IconShield() {
   );
 }
 
+function IconChart() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17V3" />
+      <path d="M3 17h14" />
+      <rect x="6" y="10" width="2.5" height="7" />
+      <rect x="10.5" y="6" width="2.5" height="11" />
+      <rect x="15" y="12" width="2.5" height="5" />
+    </svg>
+  );
+}
+
+function IconList() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="7" y1="5" x2="17" y2="5" />
+      <line x1="7" y1="10" x2="17" y2="10" />
+      <line x1="7" y1="15" x2="17" y2="15" />
+      <circle cx="3.5" cy="5" r="1" />
+      <circle cx="3.5" cy="10" r="1" />
+      <circle cx="3.5" cy="15" r="1" />
+    </svg>
+  );
+}
+
 function IconGear() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -184,6 +209,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/admin", label: "Dashboard", icon: IconGrid, roles: null },
       { href: "/admin/pipeline", label: "Pipeline", icon: IconInbox, roles: null },
+      { href: "/admin/propietarios", label: "Propietarios", icon: IconBuilding, roles: null },
+      { href: "/admin/reportes", label: "Reportes", icon: IconChart, roles: null },
     ],
   },
   {
@@ -207,6 +234,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/auditoria", label: "Auditoría", icon: IconClock, roles: null },
       { href: "/admin/inmobiliarias", label: "Inmobiliarias", icon: IconShield, roles: ["super_admin"] },
       { href: "/admin/configuracion", label: "Configuración de marca", icon: IconGear, roles: ["admin", "super_admin"] },
+      { href: "/admin/catalogos", label: "Catálogos", icon: IconList, roles: null },
     ],
   },
 ];
@@ -226,6 +254,9 @@ const LABEL_MAP: Record<string, string> = {
   auditoria: "Auditoría",
   inmobiliarias: "Inmobiliarias",
   configuracion: "Configuración",
+  propietarios: "Propietarios",
+  reportes: "Reportes",
+  catalogos: "Catálogos",
 };
 
 function buildBreadcrumbs(pathname: string) {

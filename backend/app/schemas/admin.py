@@ -84,3 +84,41 @@ class DashboardOut(BaseModel):
     tasa_aprobacion: float
     tiempo_promedio_evaluacion_horas: float | None
     distribucion_scores: list[dict]
+
+
+class SolicitudesPorCiudadOut(BaseModel):
+    ciudad: str
+    total: int
+    aprobadas: int
+    rechazadas: int
+
+
+class SolicitudesPorMesOut(BaseModel):
+    mes: str
+    total: int
+
+
+class RazonRechazoOut(BaseModel):
+    razon: str
+    count: int
+
+
+class SolicitudesPorAnalistaOut(BaseModel):
+    analista: str
+    total: int
+    pendientes: int
+
+
+class ReportesOut(BaseModel):
+    solicitudes_por_estado: dict[str, int]
+    solicitudes_por_ciudad: list[SolicitudesPorCiudadOut]
+    solicitudes_por_mes: list[SolicitudesPorMesOut]
+    tiempo_promedio_evaluacion_horas: float | None
+    tasa_aprobacion: float
+    tasa_rechazo: float
+    top_razones_rechazo: list[RazonRechazoOut]
+    solicitudes_por_analista: list[SolicitudesPorAnalistaOut]
+
+
+class AsignarAnalistaIn(BaseModel):
+    analista_id: uuid.UUID

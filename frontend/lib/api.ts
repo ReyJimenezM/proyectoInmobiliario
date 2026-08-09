@@ -359,3 +359,67 @@ export function listarAuditoria(filtros: {
   params.set("pagina", String(filtros.pagina ?? 1));
   return fetchAutenticado<AuditoriaListOut>(`/api/admin/auditoria?${params.toString()}`);
 }
+
+// --- Portal del solicitante ---
+export function consultarEstado(codigo: string, documento: string): Promise<any> {
+  return fetch(`${API_URL}/api/solicitudes/estado`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ codigo, documento }),
+  }).then((r) => {
+    if (!r.ok) throw new ApiError(r.status, "No se encontró la solicitud");
+    return r.json();
+  });
+}
+
+export function listarPropietariosAdmin(): Promise<any[]> {
+  return fetchAutenticado<any[]>("/api/admin/propietarios");
+}
+
+export function crearPropietarioAdmin(payload: Record<string, unknown>): Promise<any> {
+  return fetchAutenticado<any>("/api/admin/propietarios", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function actualizarRiesgoPropietario(id: string, componentes: Record<string, number>): Promise<RiesgoOut> {
+  return fetchAutenticado<RiesgoOut>(`/api/admin/propietarios/${id}/riesgo`, {
+    method: "PATCH",
+    body: JSON.stringify({ componentes }),
+  });
+}
+
+export function obtenerReportesAdmin(): Promise<any> {
+  return fetchAutenticado<any>("/api/admin/reportes");
+}
+
+export function revisarDocumentoAdmin(
+  solicitudId: string,
+  documentoId: string,
+  payload: { estado: string; comentario?: string }
+): Promise<any> {
+  return fetchAutenticado<any>(`/api/solicitudes/${solicitudId}/documentos/${documentoId}/revision`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function agregarComentarioAdmin(solicitudId: string, texto: string): Promise<any> {
+  return fetchAutenticado<any>(`/api/solicitudes/${solicitudId}/comentarios`, {
+    method: "POST",
+    body: JSON.stringify({ texto }),
+  });
+}
+
+export function listarComentariosAdmin(solicitudId: string): Promise<any[]> {
+  return fetchAutenticado<any[]>(`/api/solicitudes/${solicitudId}/comentarios`);
+}
+
+export function asignarAnalistaAdmin(solicitudId: string, analistaId: string): Promise<any> {
+  return fetchAutenticado<any>(`/api/admin/solicitudes/${solicitudId}/asignar`, {
+    method: "PATCH",
+    body: JSON.stringify({ analista_id: analistaId }),
+  });
+}
+
+export function exportarSolicitudesCSV(): Promise<any[]> {
+  return fetchAutenticado<any[]>("/api/admin/solicitudes/export");
+}

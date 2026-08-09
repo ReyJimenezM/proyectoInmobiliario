@@ -63,6 +63,7 @@ class EstadoSolicitud(str, enum.Enum):
 class EstadoDocumento(str, enum.Enum):
     cargado = "cargado"
     pendiente = "pendiente"
+    aprobado = "aprobado"
     rechazado = "rechazado"
 
 

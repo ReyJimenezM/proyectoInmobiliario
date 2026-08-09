@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +26,12 @@ class Solicitud(Base):
     datos_laborales: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     datos_financieros: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     garantias_referencias: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Codigo corto para que el solicitante consulte el estado de su tramite sin autenticarse
+    # (ver GET/POST /api/solicitudes/estado). Generado en la creacion de la solicitud.
+    codigo_seguimiento: Mapped[str | None] = mapped_column(String(8), unique=True, nullable=True)
+    analista_asignado_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True
+    )
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actualizado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -12,6 +12,7 @@ from app.core.security import hash_password
 from app.models import (
     Usuario,
     Anunciante,
+    Propietario,
     Propiedad,
     ImagenPropiedad,
     PoliticaCredito,
@@ -153,6 +154,38 @@ def run(db: Session) -> None:
                    telefono_contacto="6053456123", email="info@zonaurbana.co", inmobiliaria_id=DEFAULT_TENANT_ID),
     ]
     db.add_all(anunciantes)
+    db.flush()
+
+    # --- propietarios (F2-B3: propietarios del inmueble, con scoring de riesgo) ---
+    from motor_decision.robusto import OWNER_COMPS, nivel_riesgo, score_componentes
+
+    propietarios_datos = [
+        ("Jorge Iván Salazar", "CC", "79.845.212", "jorge.salazar@gmail.com", "3101234567", "Bogotá",
+         {"titularidad": 95, "juridica": 90, "documentacion": 88, "identidad": 100, "fraude": 95, "historial": 80, "cumplimiento": 90}),
+        ("Constructora Prisma S.A.S.", "NIT", "900.123.456-7", "legal@prisma.co", "6042345678", "Medellín",
+         {"titularidad": 90, "juridica": 85, "documentacion": 92, "identidad": 100, "fraude": 90, "historial": 70, "cumplimiento": 95}),
+        ("María Fernanda Osorio", "CC", "43.556.789", "mfosorio@gmail.com", "3151112233", "Cali",
+         {"titularidad": 70, "juridica": 65, "documentacion": 60, "identidad": 85, "fraude": 75, "historial": 50, "cumplimiento": 60}),
+        ("Habitat Inmobiliaria", "NIT", "901.234.567-1", "contacto@habitatinmobiliaria.co", "6013456789", "Bogotá",
+         {"titularidad": 85, "juridica": 88, "documentacion": 80, "identidad": 95, "fraude": 88, "historial": 75, "cumplimiento": 85}),
+        ("Luis Alberto Peña", "CC", "10.234.567", "luis.pena@hotmail.com", "3009998877", "Barranquilla",
+         {"titularidad": 45, "juridica": 40, "documentacion": 35, "identidad": 60, "fraude": 50, "historial": 30, "cumplimiento": 40}),
+        ("Ana Milena Ríos", "CE", "E-1234567", "ana.rios@outlook.com", "3187654321", "Cartagena",
+         {"titularidad": 60, "juridica": 55, "documentacion": 58, "identidad": 70, "fraude": 65, "historial": 40, "cumplimiento": 55}),
+        ("Zona Urbana Propiedades", "NIT", "900.876.543-2", "info@zonaurbana.co", "6053456123", "Cali",
+         {"titularidad": 92, "juridica": 90, "documentacion": 85, "identidad": 100, "fraude": 92, "historial": 85, "cumplimiento": 90}),
+        ("Carlos Eduardo Mejía", "PA", "AB1234567", "carlos.mejia@yahoo.com", "3126665544", "Medellín",
+         {"titularidad": 25, "juridica": 20, "documentacion": 30, "identidad": 40, "fraude": 20, "historial": 15, "cumplimiento": 25}),
+    ]
+    propietarios = []
+    for nombre, tipo_doc, documento, email, telefono, ciudad, componentes in propietarios_datos:
+        score = score_componentes(componentes, OWNER_COMPS)
+        propietarios.append(Propietario(
+            id=uuid.uuid4(), inmobiliaria_id=DEFAULT_TENANT_ID, nombre=nombre, tipo_documento=tipo_doc,
+            documento=documento, email=email, telefono=telefono, ciudad=ciudad,
+            componentes_riesgo=componentes, score_riesgo=score, nivel_riesgo=nivel_riesgo(score),
+        ))
+    db.add_all(propietarios)
     db.flush()
 
     # --- propiedades ---

@@ -46,6 +46,30 @@ const config: Config = {
       borderRadius: {
         xl2: "1.25rem",
       },
+      keyframes: {
+        "drawer-in": {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        "overlay-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "toast-in": {
+          from: { opacity: "0", transform: "translateY(0.75rem) scale(0.97)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "modal-in": {
+          from: { opacity: "0", transform: "scale(0.95)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+      },
+      animation: {
+        "drawer-in": "drawer-in 0.28s cubic-bezier(.4,0,.2,1)",
+        "overlay-in": "overlay-in 0.2s ease-out",
+        "toast-in": "toast-in 0.25s cubic-bezier(.4,0,.2,1)",
+        "modal-in": "modal-in 0.18s cubic-bezier(.4,0,.2,1)",
+      },
     },
   },
   plugins: [],

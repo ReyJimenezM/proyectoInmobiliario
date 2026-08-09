@@ -245,7 +245,7 @@ export interface GarantiasReferenciasInput {
 export interface DocumentoOut {
   id: string;
   tipo_documento: string;
-  estado: "cargado" | "pendiente" | "rechazado";
+  estado: "cargado" | "pendiente" | "rechazado" | "aprobado";
   cargado_en: string;
 }
 

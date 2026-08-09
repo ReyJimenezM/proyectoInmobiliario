@@ -1,3 +1,5 @@
+import random
+import string
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, requiere_analista_o_admin, requiere_staff
 from app.db.session import get_db
+from app.models.auditoria import Auditoria
+from app.models.comentario_solicitud import ComentarioSolicitud
 from app.models.documento_solicitud import DocumentoSolicitud
 from app.models.enums import EstadoSolicitud, RolUsuario
 from app.models.evaluacion import Evaluacion
@@ -15,10 +19,15 @@ from app.models.propiedad import Propiedad
 from app.models.solicitud import Solicitud
 from app.models.usuario import Usuario
 from app.schemas.solicitud import (
+    ComentarioIn,
+    ComentarioOut,
+    ConsultarEstadoIn,
+    ConsultarEstadoOut,
     DatosFinancierosIn,
     DatosLaboralesIn,
     DatosPersonalesIn,
     EnviarSolicitudIn,
+    EventoTimelineOut,
     GarantiasReferenciasIn,
     ResultadoSolicitudOut,
     SolicitudCrearIn,
@@ -29,6 +38,17 @@ from app.services.auditoria import registrar
 from app.services.checklist_documentos import documentos_requeridos
 
 router = APIRouter(prefix="/api/solicitudes", tags=["solicitudes"])
+
+_ALFABETO_CODIGO = string.ascii_uppercase + string.digits
+
+
+def _generar_codigo_seguimiento(db: Session) -> str:
+    """Codigo corto de 8 caracteres, unico, para consulta publica del estado (sin login)."""
+    while True:
+        codigo = "".join(random.choices(_ALFABETO_CODIGO, k=8))
+        existe = db.execute(select(Solicitud.id).where(Solicitud.codigo_seguimiento == codigo)).scalar()
+        if existe is None:
+            return codigo
 
 
 def _obtener_solicitud_propia_o_403(
@@ -64,6 +84,7 @@ def crear_solicitud(
         inmobiliaria_id=propiedad.inmobiliaria_id,
         vertical=payload.vertical,
         estado=EstadoSolicitud.borrador,
+        codigo_seguimiento=_generar_codigo_seguimiento(db),
     )
     db.add(solicitud)
     registrar(
@@ -280,3 +301,105 @@ def listar_solicitudes(
         query = query.where(Solicitud.estado == estado)
     query = query.order_by(Solicitud.creado_en.desc())
     return list(db.execute(query).scalars().all())
+
+
+_TITULOS_EVENTOS = {
+    "creada": "Solicitud creada",
+    "enviada": "Solicitud enviada",
+    "datos_personales_actualizados": "Datos personales actualizados",
+    "datos_laborales_actualizados": "Datos laborales actualizados",
+    "datos_financieros_actualizados": "Datos financieros actualizados",
+    "garantias_referencias_actualizadas": "Garantías y referencias actualizadas",
+    "decision_manual_tomada": "Decisión manual registrada",
+    "analista_asignado": "Analista asignado",
+    "documento_revisado": "Documento revisado",
+    "comentario_agregado": "Comentario agregado",
+}
+
+
+@router.post("/estado", response_model=ConsultarEstadoOut)
+def consultar_estado(payload: ConsultarEstadoIn, db: Session = Depends(get_db)) -> ConsultarEstadoOut:
+    """Consulta publica (sin autenticacion) del estado de una solicitud, usando el
+    codigo de seguimiento entregado al solicitante y su numero de documento como
+    segundo factor -- evita que cualquiera con el codigo pueda ver datos de otra persona."""
+    solicitud = db.execute(
+        select(Solicitud).where(Solicitud.codigo_seguimiento == payload.codigo.strip().upper())
+    ).scalar_one_or_none()
+    if solicitud is None:
+        raise HTTPException(404, "No se encontró una solicitud con ese código de seguimiento")
+
+    documento_registrado = (solicitud.datos_personales or {}).get("numero_documento")
+    if not documento_registrado or documento_registrado != payload.documento.strip():
+        raise HTTPException(404, "No se encontró una solicitud con ese código de seguimiento y documento")
+
+    eventos = list(
+        db.execute(
+            select(Auditoria)
+            .where(Auditoria.entidad_tipo == "solicitud", Auditoria.entidad_id == solicitud.id)
+            .order_by(Auditoria.timestamp.asc())
+        ).scalars()
+    )
+
+    timeline = [
+        EventoTimelineOut(
+            fecha=evento.timestamp,
+            titulo=_TITULOS_EVENTOS.get(evento.accion, evento.accion.replace("_", " ").capitalize()),
+            descripcion=evento.accion,
+            estado=solicitud.estado.value,
+        )
+        for evento in eventos
+    ]
+
+    fecha_actuacion = eventos[-1].timestamp if eventos else solicitud.actualizado_en
+
+    return ConsultarEstadoOut(
+        estado=solicitud.estado,
+        fecha_creacion=solicitud.creado_en,
+        fecha_actuacion=fecha_actuacion,
+        timeline=timeline,
+    )
+
+
+def _obtener_solicitud_staff_o_403(solicitud_id: uuid.UUID, usuario: Usuario, db: Session) -> Solicitud:
+    solicitud = db.get(Solicitud, solicitud_id)
+    if solicitud is None:
+        raise HTTPException(404, "Solicitud no encontrada")
+    if usuario.rol != RolUsuario.super_admin and solicitud.inmobiliaria_id != usuario.inmobiliaria_id:
+        raise HTTPException(403, "Esta solicitud no pertenece a tu inmobiliaria")
+    return solicitud
+
+
+@router.post("/{solicitud_id}/comentarios", response_model=ComentarioOut, status_code=201)
+def agregar_comentario(
+    solicitud_id: uuid.UUID,
+    payload: ComentarioIn,
+    usuario: Usuario = Depends(requiere_staff),
+    db: Session = Depends(get_db),
+) -> ComentarioSolicitud:
+    _obtener_solicitud_staff_o_403(solicitud_id, usuario, db)
+
+    comentario = ComentarioSolicitud(
+        id=uuid.uuid4(), solicitud_id=solicitud_id, usuario_id=usuario.id, texto=payload.texto,
+    )
+    db.add(comentario)
+    registrar(
+        db, entidad_tipo="solicitud", entidad_id=solicitud_id, accion="comentario_agregado",
+        actor_id=usuario.id, payload_despues={"texto": payload.texto},
+    )
+    db.commit()
+    db.refresh(comentario)
+    return comentario
+
+
+@router.get("/{solicitud_id}/comentarios", response_model=list[ComentarioOut])
+def listar_comentarios(
+    solicitud_id: uuid.UUID, usuario: Usuario = Depends(requiere_staff), db: Session = Depends(get_db)
+) -> list[ComentarioSolicitud]:
+    _obtener_solicitud_staff_o_403(solicitud_id, usuario, db)
+    return list(
+        db.execute(
+            select(ComentarioSolicitud)
+            .where(ComentarioSolicitud.solicitud_id == solicitud_id)
+            .order_by(ComentarioSolicitud.created_at.asc())
+        ).scalars()
+    )
