@@ -172,6 +172,21 @@ def _frase_estandar(estado_http: int) -> str:
         return ""
 
 
+#: Detalles en inglés que generan las utilidades de seguridad de FastAPI, no nuestros
+#: endpoints. No coinciden con la frase estandar de Starlette ("Unauthorized"), asi que
+#: sin esta lista se colaban tal cual al usuario final: la sesion caducada es el error
+#: mas frecuente que ve alguien, y respondia "Not authenticated".
+DETALLES_DEL_FRAMEWORK = frozenset({
+    "Not authenticated",
+    "Invalid authentication credentials",
+    "Could not validate credentials",
+})
+
+
+def _es_detalle_del_framework(detalle: str, estado_http: int) -> bool:
+    return detalle == _frase_estandar(estado_http) or detalle in DETALLES_DEL_FRAMEWORK
+
+
 @app.exception_handler(StarletteHTTPException)
 async def _manejar_error_http(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     codigos = {
@@ -197,7 +212,7 @@ async def _manejar_error_http(request: Request, exc: StarletteHTTPException) -> 
     por_defecto = genericos.get(exc.status_code, "No se pudo completar la operación.")
 
     detalle = exc.detail
-    if isinstance(detalle, str) and detalle and detalle != _frase_estandar(exc.status_code):
+    if isinstance(detalle, str) and detalle and not _es_detalle_del_framework(detalle, exc.status_code):
         mensaje = detalle  # mensaje propio del endpoint, ya viene en español
     else:
         mensaje = por_defecto
