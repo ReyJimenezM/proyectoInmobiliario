@@ -436,3 +436,122 @@ export function asignarAnalistaAdmin(solicitudId: string, analistaId: string): P
 export function exportarSolicitudesCSV(): Promise<any[]> {
   return fetchAutenticado<any[]>("/api/admin/solicitudes/export");
 }
+
+// --- Catálogos maestros (DIVIPOLA, CIIU, operativos) ---
+export function obtenerDivipola(): Promise<{ departamentos: { cod: string; nombre: string; municipios: { cod: string; nombre: string }[] }[] }> {
+  return fetchJson("/api/catalogos/divipola", { cache: "no-store" });
+}
+
+export function buscarCiiu(q: string): Promise<{ codigo: string; descripcion: string; seccion: string; seccion_nombre: string; division: string; division_nombre: string }[]> {
+  return fetchJson(`/api/catalogos/ciiu?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+}
+
+export function obtenerEstructuraCiiu(): Promise<{ secciones: { codigo: string; nombre: string; divisiones: string }[]; divisiones: { codigo: string; seccion: string; nombre: string; clases_cargadas: number }[]; total_clases: number; total_oficial: number }> {
+  return fetchJson("/api/catalogos/ciiu/estructura", { cache: "no-store" });
+}
+
+export function obtenerCatalogosOperativos(): Promise<Record<string, string[]>> {
+  return fetchJson("/api/catalogos/operativos", { cache: "no-store" });
+}
+
+export function actualizarCatalogoOperativo(clave: string, valores: string[]): Promise<Record<string, string[]>> {
+  return fetchAutenticado(`/api/admin/catalogos/operativos/${encodeURIComponent(clave)}`, {
+    method: "PUT",
+    body: JSON.stringify({ valores }),
+  });
+}
+
+// --- Parametrización operativa ---
+export interface ParametrizacionOperativa {
+  sla: Record<string, number>;
+  auto_asignacion: boolean;
+  notificaciones: boolean;
+  revision_manual_obligatoria: boolean;
+  motivos_rechazo: string[];
+}
+
+export function obtenerParametrizacion(): Promise<ParametrizacionOperativa> {
+  return fetchAutenticado("/api/admin/parametrizacion");
+}
+
+export function guardarParametrizacion(payload: Partial<ParametrizacionOperativa>): Promise<ParametrizacionOperativa> {
+  return fetchAutenticado("/api/admin/parametrizacion", { method: "PUT", body: JSON.stringify(payload) });
+}
+
+// --- Requisitos documentales configurables ---
+export interface DocumentoRequisito {
+  id: string;
+  nombre: string;
+  para: string;
+  contiene: string;
+  formato: string;
+  ejemplo: string;
+  sin_validar: string;
+  obligatorio: boolean;
+}
+
+export interface ReglaRequisito {
+  id: string;
+  condicion: string;
+  valor: string;
+  docs: string[];
+  activa: boolean;
+  autor: string | null;
+  fecha: string | null;
+}
+
+export interface RequisitosConfig {
+  base: DocumentoRequisito[];
+  perfiles: Record<string, DocumentoRequisito[]>;
+  reglas: ReglaRequisito[];
+}
+
+export function obtenerRequisitos(): Promise<RequisitosConfig> {
+  return fetchAutenticado("/api/admin/requisitos");
+}
+
+export function actualizarDocumentoRequisito(perfil: string, docId: string, payload: Partial<DocumentoRequisito>): Promise<RequisitosConfig> {
+  return fetchAutenticado(`/api/admin/requisitos/documentos/${encodeURIComponent(perfil)}/${encodeURIComponent(docId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function actualizarReglaRequisito(reglaId: string, payload: Partial<ReglaRequisito>): Promise<RequisitosConfig> {
+  return fetchAutenticado(`/api/admin/requisitos/reglas/${encodeURIComponent(reglaId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Motor de validación / calidad de datos ---
+export interface HallazgoValidacion {
+  tipo: string;
+  tipo_etiqueta: string;
+  severidad: number;
+  titulo: string;
+  detalle: string;
+  campos: string[];
+  accion: string;
+}
+
+export interface CalidadDatoOut {
+  campo: string;
+  etiqueta: string;
+  valor: string | null;
+  estado: string;
+  estado_etiqueta: string;
+  peso: number;
+  fuente: string;
+}
+
+export interface ValidacionSolicitudOut {
+  hallazgos: HallazgoValidacion[];
+  calidad: CalidadDatoOut[];
+  verificabilidad: number;
+  resumen: { errores: number; advertencias: number; verificados: number; total_campos: number };
+}
+
+export function validarSolicitudAdmin(solicitudId: string): Promise<ValidacionSolicitudOut> {
+  return fetchAutenticado(`/api/admin/solicitudes/${solicitudId}/validacion`);
+}

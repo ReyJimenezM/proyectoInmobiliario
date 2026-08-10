@@ -13,6 +13,7 @@ from app.models.decision_manual import DecisionManual
 from app.models.auditoria import Auditoria
 from app.models.simulacion import Simulacion
 from app.models.comentario_solicitud import ComentarioSolicitud
+from app.models.configuracion_operativa import ConfiguracionOperativa
 
 __all__ = [
     "Inmobiliaria",
@@ -31,4 +32,5 @@ __all__ = [
     "Auditoria",
     "Simulacion",
     "ComentarioSolicitud",
+    "ConfiguracionOperativa",
 ]

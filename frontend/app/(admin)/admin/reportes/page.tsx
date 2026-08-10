@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { obtenerReportesAdmin } from "@/lib/api";
+import { listarSolicitudesAdmin, obtenerReportesAdmin } from "@/lib/api";
 import { formatoPorcentaje } from "@/lib/format";
+import type { SolicitudOut } from "@/lib/types";
 
 interface ReportesOut {
   solicitudes_por_estado: Record<string, number>;
@@ -430,27 +431,157 @@ function TarjetaAnalista({ analista }: { analista: ReportesOut["solicitudes_por_
   );
 }
 
+/* ---------------------------------- Tiempo por analista ---------------------------------- */
+
+const HORAS_DEMO = [4.2, 6.8, 5.1];
+
+function TiempoAnalistaCard({ analistas }: { analistas: ReportesOut["solicitudes_por_analista"] }) {
+  const filas = analistas.map((a, i) => ({ analista: a.analista, horas: HORAS_DEMO[i % HORAS_DEMO.length] }));
+  const maxHoras = Math.max(1, ...filas.map((f) => f.horas));
+  return (
+    <div className="rounded-xl border border-ink-100 bg-white p-6 shadow-sm">
+      <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-ink-500">Tiempo por analista</h2>
+      <div className="space-y-3">
+        {filas.map((f) => (
+          <div key={f.analista}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="text-ink-600">{f.analista}</span>
+              <span className="font-semibold text-ink-800">{f.horas} h</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-ink-100">
+              <div
+                className="h-full rounded-full bg-clay-500 transition-all duration-700"
+                style={{ width: `${(f.horas / maxHoras) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+        {filas.length === 0 && <p className="text-sm text-ink-400">Sin analistas con solicitudes asignadas.</p>}
+      </div>
+      <p className="mt-4 text-xs text-ink-400">Horas promedio de evaluación por solicitud (datos demo).</p>
+    </div>
+  );
+}
+
+/* ---------------------------------- Documentos rechazados ---------------------------------- */
+
+const DOCS_RECHAZADOS_DEMO = [
+  { documento: "Extractos bancarios", count: 7 },
+  { documento: "Certificación laboral", count: 5 },
+  { documento: "Documento de identidad", count: 2 },
+  { documento: "RUT", count: 2 },
+  { documento: "Certificado de tradición", count: 1 },
+];
+
+function DocumentosRechazadosCard() {
+  const total = DOCS_RECHAZADOS_DEMO.reduce((a, b) => a + b.count, 0);
+  const max = Math.max(1, ...DOCS_RECHAZADOS_DEMO.map((d) => d.count));
+  return (
+    <div className="rounded-xl border border-ink-100 bg-white p-6 shadow-sm">
+      <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-ink-500">Documentos rechazados</h2>
+      <div className="space-y-3">
+        {DOCS_RECHAZADOS_DEMO.map((d) => (
+          <div key={d.documento}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="text-ink-600">{d.documento}</span>
+              <span className="font-semibold text-ink-800">
+                {d.count} <span className="text-ink-400">({formatoPorcentaje(d.count / total)})</span>
+              </span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-ink-100">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all duration-700"
+                style={{ width: `${(d.count / max) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-ink-400">Rechazos en revisión documental (datos demo).</p>
+    </div>
+  );
+}
+
+/* ---------------------------------- Filtros ---------------------------------- */
+
+interface FiltrosReporte {
+  desde: string;
+  hasta: string;
+  estado: string;
+  analista: string;
+}
+
+const FILTROS_VACIOS: FiltrosReporte = { desde: "", hasta: "", estado: "", analista: "" };
+
 /* ---------------------------------- Page ---------------------------------- */
 
 export default function ReportesAdminPage() {
   const [reportes, setReportes] = useState<ReportesOut | null>(null);
+  const [solicitudes, setSolicitudes] = useState<SolicitudOut[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [filtros, setFiltros] = useState<FiltrosReporte>(FILTROS_VACIOS);
+  const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosReporte>(FILTROS_VACIOS);
 
   useEffect(() => {
     obtenerReportesAdmin()
       .then((r) => setReportes(r as ReportesOut))
       .catch(() => setError("No pudimos cargar los reportes."));
+    listarSolicitudesAdmin()
+      .then(setSolicitudes)
+      .catch(() => {
+        /* los filtros locales quedan deshabilitados si falla */
+      });
   }, []);
 
+  const filtroActivo =
+    filtrosAplicados.desde !== "" || filtrosAplicados.hasta !== "" || filtrosAplicados.estado !== "";
+
+  const solicitudesFiltradas = useMemo(() => {
+    if (!filtroActivo) return solicitudes;
+    return solicitudes.filter((s) => {
+      const fecha = s.creado_en.slice(0, 10);
+      if (filtrosAplicados.desde && fecha < filtrosAplicados.desde) return false;
+      if (filtrosAplicados.hasta && fecha > filtrosAplicados.hasta) return false;
+      if (filtrosAplicados.estado && s.estado !== filtrosAplicados.estado) return false;
+      return true;
+    });
+  }, [solicitudes, filtrosAplicados, filtroActivo]);
+
+  /* Vista de reportes: con filtros activos, estado + total + por_mes se derivan
+     de la lista filtrada; el resto de gráficos mantiene el agregado del API. */
+  const reportesVista = useMemo(() => {
+    if (!reportes || !filtroActivo) return reportes;
+    const porEstado: Record<string, number> = {};
+    const porMesMap: Record<string, number> = {};
+    for (const s of solicitudesFiltradas) {
+      porEstado[s.estado] = (porEstado[s.estado] ?? 0) + 1;
+      const mes = s.creado_en.slice(0, 7);
+      porMesMap[mes] = (porMesMap[mes] ?? 0) + 1;
+    }
+    const porMes = Object.entries(porMesMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, total]) => ({ mes, total }));
+    const aprobadas = porEstado.aprobada ?? 0;
+    const rechazadas = porEstado.rechazada ?? 0;
+    const evaluadas = aprobadas + rechazadas;
+    return {
+      ...reportes,
+      solicitudes_por_estado: porEstado,
+      solicitudes_por_mes: porMes,
+      tasa_aprobacion: evaluadas > 0 ? aprobadas / evaluadas : 0,
+      tasa_rechazo: evaluadas > 0 ? rechazadas / evaluadas : 0,
+    };
+  }, [reportes, filtroActivo, solicitudesFiltradas]);
+
   const totalSolicitudes = useMemo(
-    () => (reportes ? Object.values(reportes.solicitudes_por_estado).reduce((a, b) => a + b, 0) : 0),
-    [reportes]
+    () => (reportesVista ? Object.values(reportesVista.solicitudes_por_estado).reduce((a, b) => a + b, 0) : 0),
+    [reportesVista]
   );
 
   const datosDonut = useMemo(() => {
-    if (!reportes) return [];
-    return Object.entries(reportes.solicitudes_por_estado)
+    if (!reportesVista) return [];
+    return Object.entries(reportesVista.solicitudes_por_estado)
       .filter(([, v]) => v > 0)
       .map(([estado, valor]) => ({
         clave: estado,
@@ -458,11 +589,11 @@ export default function ReportesAdminPage() {
         valor,
         color: COLORES_ESTADO_HEX[estado] ?? "#98aca4",
       }));
-  }, [reportes]);
+  }, [reportesVista]);
 
   const datosMes = useMemo(
-    () => (reportes?.solicitudes_por_mes ?? []).slice(-6).map((m) => ({ label: m.mes, valor: m.total })),
-    [reportes]
+    () => (reportesVista?.solicitudes_por_mes ?? []).slice(-6).map((m) => ({ label: m.mes, valor: m.total })),
+    [reportesVista]
   );
 
   const maxRazon = useMemo(
@@ -480,8 +611,8 @@ export default function ReportesAdminPage() {
   );
 
   const etapasFunnel = useMemo(() => {
-    if (!reportes) return [];
-    const est = reportes.solicitudes_por_estado;
+    if (!reportesVista) return [];
+    const est = reportesVista.solicitudes_por_estado;
     const enviadas =
       (est.enviada ?? 0) + (est.en_evaluacion ?? 0) + (est.revision_manual ?? 0) + (est.aprobada ?? 0) + (est.rechazada ?? 0);
     const enEvaluacion = (est.en_evaluacion ?? 0) + (est.revision_manual ?? 0) + (est.aprobada ?? 0) + (est.rechazada ?? 0);
@@ -493,12 +624,21 @@ export default function ReportesAdminPage() {
       { label: "Revisión", valor: revision, color: "#f59e0b" },
       { label: "Aprobadas", valor: aprobadas, color: "#10b981" },
     ];
-  }, [reportes]);
+  }, [reportesVista]);
 
   const slaCumplimiento = useMemo(() => {
     if (!reportes || reportes.tiempo_promedio_evaluacion_horas == null) return null;
     return reportes.tiempo_promedio_evaluacion_horas <= 48;
   }, [reportes]);
+
+  function aplicarFiltros() {
+    setFiltrosAplicados(filtros);
+  }
+
+  function limpiarFiltros() {
+    setFiltros(FILTROS_VACIOS);
+    setFiltrosAplicados(FILTROS_VACIOS);
+  }
 
   function exportar() {
     if (!reportes) return;
@@ -567,18 +707,84 @@ export default function ReportesAdminPage() {
         </div>
       </div>
 
+      {/* Filtros */}
+      <div className="rounded-xl border border-ink-100 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-ink-500">Filtros</h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-500">Desde</label>
+            <input
+              type="date"
+              value={filtros.desde}
+              onChange={(e) => setFiltros({ ...filtros, desde: e.target.value })}
+              className="rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-800 focus:border-clay-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-500">Hasta</label>
+            <input
+              type="date"
+              value={filtros.hasta}
+              onChange={(e) => setFiltros({ ...filtros, hasta: e.target.value })}
+              className="rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-800 focus:border-clay-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-500">Estado</label>
+            <select
+              value={filtros.estado}
+              onChange={(e) => setFiltros({ ...filtros, estado: e.target.value })}
+              className="rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-800 focus:border-clay-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              {Object.entries(ETIQUETAS_ESTADO).map(([clave, etiqueta]) => (
+                <option key={clave} value={clave}>
+                  {etiqueta}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-ink-500">Analista</label>
+            <input
+              type="text"
+              placeholder="Nombre del analista"
+              value={filtros.analista}
+              onChange={(e) => setFiltros({ ...filtros, analista: e.target.value })}
+              className="rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-800 focus:border-clay-500 focus:outline-none"
+            />
+          </div>
+          <button type="button" onClick={aplicarFiltros} className="btn-primary text-sm">
+            Aplicar
+          </button>
+          <button
+            type="button"
+            onClick={limpiarFiltros}
+            className="text-sm font-semibold text-clay-600 underline-offset-2 hover:underline"
+          >
+            Limpiar
+          </button>
+        </div>
+        {filtroActivo && (
+          <p className="mt-3 text-xs text-amber-600">
+            Filtros activos: {solicitudesFiltradas.length} solicitudes en el rango. Algunos gráficos usan el total
+            histórico.
+          </p>
+        )}
+      </div>
+
       {/* KPIs */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KPI titulo="Total solicitudes" valor={String(totalSolicitudes)} subtitulo="Acumulado histórico" icono={<IconoTendencia />} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <KPI titulo="Total solicitudes" valor={String(totalSolicitudes)} subtitulo={filtroActivo ? "En el rango filtrado" : "Acumulado histórico"} icono={<IconoTendencia />} />
         <KPI
           titulo="Tasa de aprobación"
-          valor={formatoPorcentaje(reportes.tasa_aprobacion)}
+          valor={formatoPorcentaje(reportesVista?.tasa_aprobacion ?? reportes.tasa_aprobacion)}
           color="text-emerald-600"
           subtitulo="Sobre total evaluado"
         />
         <KPI
           titulo="Tasa de rechazo"
-          valor={formatoPorcentaje(reportes.tasa_rechazo)}
+          valor={formatoPorcentaje(reportesVista?.tasa_rechazo ?? reportes.tasa_rechazo)}
           color="text-rose-600"
           subtitulo="Sobre total evaluado"
         />
@@ -595,6 +801,7 @@ export default function ReportesAdminPage() {
           subtitulo="Meta: menos de 48 h"
           icono={<IconoEscudo />}
         />
+        <KPI titulo="Score promedio" valor="712" subtitulo="Solicitudes evaluadas (demo)" color="text-clay-600" />
       </div>
 
       {/* Donut + Bar chart */}
@@ -633,22 +840,29 @@ export default function ReportesAdminPage() {
       </div>
 
       {/* Analistas */}
-      <div>
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-ink-500">Desempeño por analista</h2>
-        {reportes.solicitudes_por_analista.length === 0 ? (
-          <p className="rounded-xl border border-ink-100 bg-white p-6 text-sm text-ink-400 shadow-sm">
-            No hay analistas con solicitudes asignadas.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {reportes.solicitudes_por_analista.map((a) => (
-              <TarjetaAnalista key={a.analista} analista={a} />
-            ))}
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-ink-500">Desempeño por analista</h2>
+          {reportes.solicitudes_por_analista.length === 0 ? (
+            <p className="rounded-xl border border-ink-100 bg-white p-6 text-sm text-ink-400 shadow-sm">
+              No hay analistas con solicitudes asignadas.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {reportes.solicitudes_por_analista.map((a) => (
+                <TarjetaAnalista key={a.analista} analista={a} />
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-ink-500">Tiempos de evaluación</h2>
+          <TiempoAnalistaCard analistas={reportes.solicitudes_por_analista} />
+        </div>
       </div>
 
-      {/* Razones de rechazo */}
+      {/* Razones de rechazo + documentos rechazados */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div className="rounded-xl border border-ink-100 bg-white p-6 shadow-sm">
         <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-ink-500">Top razones de rechazo</h2>
         <div className="space-y-3">
@@ -673,6 +887,8 @@ export default function ReportesAdminPage() {
           })}
           {reportes.top_razones_rechazo.length === 0 && <p className="text-sm text-ink-400">No hay rechazos registrados todavía.</p>}
         </div>
+      </div>
+      <DocumentosRechazadosCard />
       </div>
 
       {/* Quick actions footer */}

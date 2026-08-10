@@ -1,0 +1,24 @@
+"""Catálogos estáticos oficiales (DIVIPOLA, CIIU) y defaults operativos."""
+from app.catalogos.datos import (
+    CATALOGOS_OPERATIVOS_DEFAULTS,
+    CIIU_CLASES,
+    CIIU_DIVISIONES,
+    CIIU_SECCIONES,
+    CIIU_SINONIMOS,
+    CIIU_TOTAL_OFICIAL,
+    DEPARTAMENTOS,
+    DIVIPOLA,
+    MUNICIPIOS,
+)
+
+__all__ = [
+    "CATALOGOS_OPERATIVOS_DEFAULTS",
+    "CIIU_CLASES",
+    "CIIU_DIVISIONES",
+    "CIIU_SECCIONES",
+    "CIIU_SINONIMOS",
+    "CIIU_TOTAL_OFICIAL",
+    "DEPARTAMENTOS",
+    "DIVIPOLA",
+    "MUNICIPIOS",
+]

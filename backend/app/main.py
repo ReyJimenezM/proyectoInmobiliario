@@ -9,14 +9,18 @@ from app.api import (
     admin,
     auditoria,
     auth,
+    catalogos,
     documentos,
     inmobiliarias,
     motor,
+    parametrizacion,
     propiedades,
     propietarios,
     proyectos,
+    requisitos,
     simulador,
     solicitudes,
+    validacion,
 )
 from app.core.config import settings
 
@@ -53,6 +57,11 @@ app.include_router(motor.router)
 app.include_router(auditoria.router)
 app.include_router(proyectos.router)
 app.include_router(proyectos.router_admin)
+app.include_router(catalogos.router)
+app.include_router(catalogos.router_admin)
+app.include_router(parametrizacion.router)
+app.include_router(requisitos.router)
+app.include_router(validacion.router)
 
 
 @app.get("/api/health")

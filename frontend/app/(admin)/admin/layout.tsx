@@ -141,6 +141,39 @@ function IconGear() {
   );
 }
 
+function IconSliders() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="4" x2="4" y2="16" />
+      <line x1="10" y1="4" x2="10" y2="16" />
+      <line x1="16" y1="4" x2="16" y2="16" />
+      <circle cx="4" cy="8" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="6" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconDocCheck() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.5H6a1 1 0 00-1 1v13a1 1 0 001 1h8a1 1 0 001-1V5.5z" />
+      <polyline points="12 2.5 12 5.5 15 5.5" />
+      <polyline points="7.5 11.5 9.5 13.5 12.5 9.5" />
+    </svg>
+  );
+}
+
+function IconDatabase() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="10" cy="5" rx="6" ry="2.5" />
+      <path d="M4 5v10c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V5" />
+      <path d="M4 10c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5" />
+    </svg>
+  );
+}
+
 function IconBell() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -226,6 +259,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/motor", label: "Motor de decisión", icon: IconCpu, roles: null },
       { href: "/admin/motor/visual", label: "Motor visual", icon: IconGrid, roles: null },
       { href: "/admin/politicas", label: "Políticas de crédito (5C)", icon: IconScales, roles: null },
+      { href: "/admin/modelo", label: "Modelo y datos", icon: IconDatabase, roles: null },
     ],
   },
   {
@@ -235,6 +269,8 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/auditoria", label: "Auditoría", icon: IconClock, roles: null },
       { href: "/admin/inmobiliarias", label: "Inmobiliarias", icon: IconShield, roles: ["super_admin"] },
       { href: "/admin/configuracion", label: "Configuración de marca", icon: IconGear, roles: ["admin", "super_admin"] },
+      { href: "/admin/parametrizacion", label: "Parametrización", icon: IconSliders, roles: null },
+      { href: "/admin/requisitos", label: "Requisitos", icon: IconDocCheck, roles: null },
       { href: "/admin/catalogos", label: "Catálogos", icon: IconList, roles: null },
     ],
   },
@@ -258,7 +294,10 @@ const LABEL_MAP: Record<string, string> = {
   configuracion: "Configuración",
   propietarios: "Propietarios",
   reportes: "Reportes",
+  modelo: "Modelo y datos",
   catalogos: "Catálogos",
+  requisitos: "Requisitos documentales",
+  parametrizacion: "Parametrización",
 };
 
 function buildBreadcrumbs(pathname: string) {

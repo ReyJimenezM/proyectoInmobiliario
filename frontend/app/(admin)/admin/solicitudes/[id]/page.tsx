@@ -16,7 +16,9 @@ import {
   obtenerSolicitud,
   revisarDocumentoAdmin,
   tomarDecisionManual,
+  validarSolicitudAdmin,
 } from "@/lib/api";
+import type { ValidacionSolicitudOut } from "@/lib/api";
 import { obtenerUsuarioSesion } from "@/lib/auth";
 import { formatoMoneda } from "@/lib/format";
 import type {
@@ -37,7 +39,7 @@ interface PageProps {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const TABS = ["Resumen", "Documentos", "Motor", "Auditoría"] as const;
+const TABS = ["Resumen", "Documentos", "Calidad de datos", "Motor", "Auditoría"] as const;
 type Tab = (typeof TABS)[number];
 
 const ETIQUETAS_ESTADO_DOC: Record<string, { label: string; dot: string; badge: string }> = {
@@ -46,6 +48,27 @@ const ETIQUETAS_ESTADO_DOC: Record<string, { label: string; dot: string; badge: 
   rechazado: { label: "Rechazado", dot: "bg-rose-500", badge: "bg-rose-50 text-rose-700" },
   pendiente: { label: "Pendiente", dot: "bg-ink-300", badge: "bg-ink-100 text-ink-500" },
 };
+
+const BADGE_ESTADO_DATO: Record<string, string> = {
+  verificado: "bg-emerald-50 text-emerald-700",
+  con_soporte: "bg-sky-50 text-sky-700",
+  declarado: "bg-ink-100 text-ink-600",
+  sin_verificar: "bg-amber-50 text-amber-700",
+  inconsistente: "bg-rose-50 text-rose-700",
+  rechazado: "bg-rose-50 text-rose-700",
+};
+
+function estiloHallazgo(severidad: number): { borde: string; fondo: string; badge: string } {
+  if (severidad >= 3) return { borde: "border-rose-200", fondo: "bg-rose-50/60", badge: "bg-rose-100 text-rose-800" };
+  if (severidad === 2) return { borde: "border-amber-200", fondo: "bg-amber-50/60", badge: "bg-amber-100 text-amber-800" };
+  return { borde: "border-sky-200", fondo: "bg-sky-50/60", badge: "bg-sky-100 text-sky-800" };
+}
+
+function colorVerificabilidad(valor: number): { texto: string; barra: string } {
+  if (valor >= 80) return { texto: "text-emerald-700", barra: "#15803D" };
+  if (valor >= 60) return { texto: "text-amber-700", barra: "#B45309" };
+  return { texto: "text-rose-700", barra: "#BC2C22" };
+}
 
 const ETIQUETAS_GRUPO: Record<string, string> = {
   capacidad: "Capacidad de pago",
@@ -213,6 +236,12 @@ export default function DetalleSolicitudAdminPage({ params }: PageProps) {
   // Motor
   const [reejecutando, setReejecutando] = useState(false);
 
+  // Calidad de datos
+  const [validacion, setValidacion] = useState<ValidacionSolicitudOut | null>(null);
+  const [cargandoValidacion, setCargandoValidacion] = useState(false);
+  const [errorValidacion, setErrorValidacion] = useState<string | null>(null);
+  const [validacionSolicitada, setValidacionSolicitada] = useState(false);
+
   const usuarioSesion = useMemo(() => obtenerUsuarioSesion(), []);
 
   async function cargarTodo() {
@@ -310,6 +339,27 @@ export default function DetalleSolicitudAdminPage({ params }: PageProps) {
       setProcesandoDoc(null);
     }
   }
+
+  async function cargarValidacion() {
+    setCargandoValidacion(true);
+    setErrorValidacion(null);
+    try {
+      const v = await validarSolicitudAdmin(params.id);
+      setValidacion(v);
+    } catch {
+      setErrorValidacion("No pudimos ejecutar la validación de calidad de datos.");
+    } finally {
+      setCargandoValidacion(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "Calidad de datos" && !validacionSolicitada) {
+      setValidacionSolicitada(true);
+      cargarValidacion();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, validacionSolicitada]);
 
   async function reejecutarMotor() {
     setReejecutando(true);
@@ -549,6 +599,200 @@ export default function DetalleSolicitudAdminPage({ params }: PageProps) {
                 );
               })}
               {documentos.length === 0 && <p className="p-5 text-sm text-ink-400">Sin documentos cargados.</p>}
+            </div>
+          )}
+
+          {tab === "Calidad de datos" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-ink-900">Calidad y verificabilidad del expediente</h3>
+                <button
+                  type="button"
+                  disabled={cargandoValidacion}
+                  onClick={cargarValidacion}
+                  className="btn-secondary text-xs"
+                >
+                  {cargandoValidacion ? "Validando..." : "Reejecutar validación"}
+                </button>
+              </div>
+
+              {cargandoValidacion && !validacion && (
+                <div className="space-y-4">
+                  <div className="h-32 animate-pulse rounded-xl bg-ink-100" />
+                  <div className="h-24 animate-pulse rounded-xl bg-ink-100" />
+                  <div className="h-48 animate-pulse rounded-xl bg-ink-100" />
+                </div>
+              )}
+
+              {errorValidacion && !cargandoValidacion && (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">
+                  {errorValidacion}
+                </p>
+              )}
+
+              {validacion && (
+                <>
+                  {/* Top row: verificabilidad + resumen */}
+                  <div className="card flex flex-wrap items-center gap-6 p-6">
+                    <div className="flex items-center gap-4">
+                      {(() => {
+                        const v = Math.round(validacion.verificabilidad);
+                        const { texto, barra } = colorVerificabilidad(v);
+                        const r = 34;
+                        const c = 2 * Math.PI * r;
+                        return (
+                          <div className="relative h-24 w-24">
+                            <svg width="96" height="96" viewBox="0 0 96 96" style={{ transform: "rotate(-90deg)" }}>
+                              <circle cx="48" cy="48" r={r} fill="none" stroke="#EFEAE4" strokeWidth="9" />
+                              <circle
+                                cx="48"
+                                cy="48"
+                                r={r}
+                                fill="none"
+                                stroke={barra}
+                                strokeWidth="9"
+                                strokeLinecap="round"
+                                strokeDasharray={`${c * Math.min(1, Math.max(0, v / 100))} ${c}`}
+                                className="transition-all duration-700"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className={`text-2xl font-bold ${texto}`}>{v}</span>
+                              <span className="text-[10px] text-ink-400">/ 100</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div>
+                        <p className="text-sm font-bold uppercase tracking-wider text-ink-500">Verificabilidad</p>
+                        <p className="mt-0.5 max-w-xs text-xs text-ink-400">
+                          Qué tan respaldada está la información del expediente por documentos y fuentes confiables.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                        {validacion.resumen.errores} errores
+                      </span>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                        {validacion.resumen.advertencias} advertencias
+                      </span>
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        {validacion.resumen.verificados} verificados de {validacion.resumen.total_campos} campos
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Hallazgos */}
+                  <div className="card p-5">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-500">Hallazgos</h4>
+                    {validacion.hallazgos.length > 0 ? (
+                      <div className="space-y-3">
+                        {validacion.hallazgos
+                          .slice()
+                          .sort((a, b) => b.severidad - a.severidad)
+                          .map((h, i) => {
+                            const estilo = estiloHallazgo(h.severidad);
+                            return (
+                              <div key={`${h.tipo}-${i}`} className={`rounded-lg border p-4 ${estilo.borde} ${estilo.fondo}`}>
+                                <div className="mb-1 flex flex-wrap items-center gap-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${estilo.badge}`}>
+                                    {h.tipo_etiqueta}
+                                  </span>
+                                  <p className="text-sm font-bold text-ink-900">{h.titulo}</p>
+                                </div>
+                                <p className="text-sm text-ink-600">{h.detalle}</p>
+                                {h.campos.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {h.campos.map((campo) => (
+                                      <span
+                                        key={campo}
+                                        className="rounded border border-ink-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-ink-600"
+                                      >
+                                        {campo}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="mt-2 text-xs font-semibold text-ink-700">
+                                  Acción sugerida: <span className="font-normal text-ink-600">{h.accion}</span>
+                                </p>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                          <circle cx="9" cy="9" r="8" stroke="#059669" strokeWidth="1.5" />
+                          <path d="M5.5 9.5L8 12L12.5 6.5" stroke="#059669" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <p className="text-sm text-emerald-700">
+                          Sin hallazgos — la información del expediente es consistente.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Calidad por campo */}
+                  <div className="card p-5">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-500">Calidad por campo</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs uppercase text-ink-400">
+                          <tr>
+                            <th className="pb-2 pr-3 font-semibold">Campo</th>
+                            <th className="pb-2 pr-3 font-semibold">Valor</th>
+                            <th className="pb-2 pr-3 font-semibold">Estado</th>
+                            <th className="pb-2 pr-3 font-semibold">Fuente</th>
+                            <th className="pb-2 font-semibold">Peso</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {validacion.calidad.map((c) => (
+                            <tr key={c.campo} className="border-t border-ink-100">
+                              <td className="py-2 pr-3 text-ink-700">{c.etiqueta}</td>
+                              <td className="max-w-[180px] truncate py-2 pr-3 text-ink-800" title={c.valor ?? undefined}>
+                                {c.valor ?? "—"}
+                              </td>
+                              <td className="py-2 pr-3">
+                                <span
+                                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                                    BADGE_ESTADO_DATO[c.estado] ?? "bg-ink-100 text-ink-600"
+                                  }`}
+                                >
+                                  {c.estado_etiqueta}
+                                </span>
+                              </td>
+                              <td className="py-2 pr-3 text-xs text-ink-500">{c.fuente}</td>
+                              <td className="py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 w-16 overflow-hidden rounded-full bg-ink-100">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        c.peso >= 0.8 ? "bg-emerald-500" : c.peso >= 0.5 ? "bg-amber-500" : "bg-rose-500"
+                                      }`}
+                                      style={{ width: `${Math.min(100, Math.max(0, c.peso * 100))}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-ink-500">{Math.round(c.peso * 100)}%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                          {validacion.calidad.length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="py-4 text-center text-ink-400">
+                                Sin campos evaluados.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
