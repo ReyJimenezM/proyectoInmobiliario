@@ -4,6 +4,7 @@ EntradaEvaluacion del motor, que estructuralmente NO tiene slots para variables
 discriminatorias -- el filtrado ocurre aqui, al construir la entrada, no dentro del motor
 (No Negociable #3). El motor en si permanece ciego a todo lo que no le pasemos."""
 import uuid
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -32,6 +33,7 @@ from motor_decision import (
 from motor_decision import evaluar as motor_evaluar
 from motor_decision.robusto import (
     Codeudor as CodeudorRobusto,
+    ContextoReglasDuras,
     CostoInmueble,
     Documento as DocumentoRobusto,
     EntradaRiesgoArrendatario,
@@ -209,18 +211,117 @@ def _solicitud_a_entrada_riesgo_arrendatario(
     # etc.) NUNCA se lee aca -- No Negociable #3.
 
 
+# Documentos que acreditan identidad o ingresos: si uno de estos queda rechazado, la
+# regla dura HR-03 manda el caso a revision humana sin importar el puntaje.
+DOCUMENTOS_CRITICOS = frozenset({
+    "cedula_ciudadania", "cedula_codeudor",
+    "desprendibles_pago_o_certificacion_laboral", "extractos_bancarios_3_meses",
+    "certificado_pension_vigente", "soporte_ingresos_codeudor",
+})
+
+# Campos obligatorios por paso del wizard. Se usan para HR-09/HR-10 (calidad del dato).
+_CAMPOS_OBLIGATORIOS = {
+    "datos_personales": ("nombres_apellidos", "numero_documento", "fecha_nacimiento", "telefono", "email"),
+    "datos_laborales": ("tipo_ocupacion",),
+    "datos_financieros": ("ingresos_mensuales_fijos",),
+}
+
+
+def _fecha_nacimiento(dp: dict):
+    """datos_personales es JSONB: la fecha llega como str ISO tras model_dump(mode="json")."""
+    valor = dp.get("fecha_nacimiento")
+    if isinstance(valor, date):
+        return valor
+    if isinstance(valor, str):
+        try:
+            return date.fromisoformat(valor[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _contexto_reglas_duras(
+    solicitud: Solicitud, propiedad: Propiedad, documentos_cargados: list[DocumentoSolicitud]
+) -> ContextoReglasDuras:
+    """Traduce el expediente a los hechos binarios de la capa 3. Lo que la plataforma
+    todavia no captura (marcaciones antifraude, validacion biometrica de identidad) queda
+    en su valor neutro: la regla no dispara, no se inventa el hecho."""
+    dp = solicitud.datos_personales or {}
+    gr = solicitud.garantias_referencias or {}
+
+    tipos_requeridos = documentos_requeridos(
+        solicitud.datos_laborales or {}, gr, solicitud.vertical.value
+    )
+    por_tipo = {doc.tipo_documento: doc.estado.value for doc in documentos_cargados}
+    faltantes = sum(1 for tipo in tipos_requeridos if por_tipo.get(tipo) not in ("cargado", "aprobado"))
+    critico_rechazado = any(
+        estado == "rechazado" and tipo in DOCUMENTOS_CRITICOS for tipo, estado in por_tipo.items()
+    )
+
+    campos_faltantes = 0
+    campos_invalidos = 0
+    for atributo, obligatorios in _CAMPOS_OBLIGATORIOS.items():
+        bloque = getattr(solicitud, atributo, None) or {}
+        campos_faltantes += sum(1 for campo in obligatorios if bloque.get(campo) in (None, ""))
+    if dp.get("fecha_nacimiento") is not None and _fecha_nacimiento(dp) is None:
+        campos_invalidos += 1  # fecha presente pero ilegible
+
+    # Situacion juridica del inmueble: se considera resuelta cuando un analista ya evaluo
+    # el componente "juridica" del scoring del inmueble con nota suficiente.
+    componentes = propiedad.componentes_riesgo or {} if propiedad is not None else {}
+    juridica = componentes.get("juridica")
+    situacion_juridica_sin_resolver = juridica is not None and float(juridica) < 60
+    titularidad = componentes.get("titularidad")
+    titularidad_sin_resolver = titularidad is not None and float(titularidad) < 40
+
+    return ContextoReglasDuras(
+        fraude_confirmado=bool(gr.get("fraude_confirmado", False)),
+        fecha_nacimiento=_fecha_nacimiento(dp),
+        documento_critico_rechazado=critico_rechazado,
+        documentos_obligatorios_faltantes=faltantes,
+        titularidad_sin_resolver=titularidad_sin_resolver,
+        identidad_verificada=bool(dp.get("identidad_verificada", True)),
+        alertas_fraude=int(gr.get("alertas_fraude", 0) or 0),
+        situacion_juridica_sin_resolver=situacion_juridica_sin_resolver,
+        campos_invalidos=campos_invalidos,
+        campos_faltantes=campos_faltantes,
+    )
+
+
 DECISION_ROBUSTA_A_ENUM = {
     "PREAPROBADA": DecisionEvaluacion.aprobada,
     "REQUISITOS": DecisionEvaluacion.revision_manual,
     "ESTUDIO": DecisionEvaluacion.revision_manual,
     "RECHAZADA": DecisionEvaluacion.rechazada,
+    # Decisiones que puede forzar la capa de reglas duras:
+    "REVISION_MANUAL": DecisionEvaluacion.revision_manual,
+    # INCOMPLETA no es un rechazo: falta informacion. En la tabla de evaluaciones se
+    # registra como revision_manual (el enum de decision no distingue) y el matiz queda
+    # en el estado de la solicitud y en decision_driver/reglas_duras.
+    "INCOMPLETA": DecisionEvaluacion.revision_manual,
 }
 DECISION_ROBUSTA_A_ESTADO_SOLICITUD = {
     "PREAPROBADA": EstadoSolicitud.aprobada,
     "REQUISITOS": EstadoSolicitud.con_ruta_alterna,
     "ESTUDIO": EstadoSolicitud.revision_manual,
     "RECHAZADA": EstadoSolicitud.rechazada,
+    "REVISION_MANUAL": EstadoSolicitud.revision_manual,
+    "INCOMPLETA": EstadoSolicitud.incompleta,
 }
+
+
+def _snapshot_motor(motor_config: MotorDecisionConfig) -> dict:
+    """Congela la configuracion con la que se evaluo. Publicar una version nueva del
+    motor no puede alterar lo que decia una evaluacion anterior: quien lea el historico
+    lee este snapshot, nunca la configuracion vigente."""
+    return {
+        "motor_id": str(motor_config.id),
+        "version": motor_config.version,
+        "autor": motor_config.autor,
+        "pesos": dict(motor_config.pesos),
+        "parametros": dict(motor_config.parametros),
+        "reglas": [dict(r) for r in motor_config.reglas if r.get("activa", True)],
+    }
 
 
 def evaluar_solicitud_robusto(
@@ -229,8 +330,9 @@ def evaluar_solicitud_robusto(
 ) -> tuple[Evaluacion, EstadoSolicitud]:
     entrada = _solicitud_a_entrada_riesgo_arrendatario(solicitud, propiedad, documentos_cargados)
     motor_dc = _motor_config_a_dataclass(motor_config)
+    contexto_duro = _contexto_reglas_duras(solicitud, propiedad, documentos_cargados)
 
-    resultado = motor_evaluar_robusto(entrada, motor_dc)
+    resultado = motor_evaluar_robusto(entrada, motor_dc, contexto_duro)
 
     variables_evaluadas = [
         {
@@ -267,9 +369,27 @@ def evaluar_solicitud_robusto(
         variables_evaluadas=variables_evaluadas,
         decision=DECISION_ROBUSTA_A_ENUM[resultado.decision],
         explicacion_generada=explicacion,
+        snapshot_motor=_snapshot_motor(motor_config),
+        reglas_duras=resultado.reglas_duras,
+        decision_driver=resultado.decision_driver,
     )
     db.add(evaluacion)
     return evaluacion, DECISION_ROBUSTA_A_ESTADO_SOLICITUD[resultado.decision]
+
+
+def _snapshot_politica(politica: PoliticaCredito) -> dict:
+    """Mismo principio de inmutabilidad que `_snapshot_motor`, para el motor 5C: se congela
+    la politica con la que se evaluo, no se relee la vigente al consultar el historico.
+    Tolerante a atributos ausentes: la politica llega tambien desde el simulador, que usa
+    objetos armados en memoria y no filas completas de la tabla."""
+    vertical = getattr(politica, "vertical", None)
+    return {
+        "politica_id": str(getattr(politica, "id", "")) or None,
+        "version": getattr(politica, "version", None),
+        "vertical": vertical.value if hasattr(vertical, "value") else vertical,
+        "variables": getattr(politica, "variables", None),
+        "bandas_decision": getattr(politica, "bandas_decision", None),
+    }
 
 
 def evaluar_solicitud(db: Session, solicitud: Solicitud, politica_activa: PoliticaCredito) -> Evaluacion:
@@ -286,6 +406,11 @@ def evaluar_solicitud(db: Session, solicitud: Solicitud, politica_activa: Politi
         variables_evaluadas=_resultado_a_variables_jsonb(resultado),
         decision=DecisionEvaluacion(resultado.decision),
         explicacion_generada=resultado.explicacion_generada,
+        # Mismo principio de inmutabilidad que en el motor robusto: se congela la politica
+        # con la que se evaluo, no se relee la vigente al consultar el historico.
+        snapshot_motor=_snapshot_politica(politica_activa),
+        reglas_duras=[],
+        decision_driver="PUNTAJE",
     )
     db.add(evaluacion)
     return evaluacion

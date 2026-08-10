@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import requiere_analista_o_admin, requiere_staff, tenant_id_o_none
+from app.core.deps import (
+    requiere_analista_o_admin,
+    requiere_staff,
+    tenant_id_o_none,
+    verificar_tenant_o_404,
+)
 from app.db.session import get_db
 from app.models.anunciante import Anunciante
 from app.models.decision_manual import DecisionManual
@@ -33,6 +38,7 @@ from app.schemas.admin import (
 from app.schemas.riesgo import ComponentesRiesgoIn, RiesgoOut
 from app.schemas.solicitud import SolicitudOut
 from app.services.auditoria import registrar
+from app.services.flujo import transicionar
 from motor_decision.robusto import OWNER_COMPS, nivel_riesgo, score_componentes
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -46,10 +52,7 @@ def tomar_decision_manual(
     db: Session = Depends(get_db),
 ) -> DecisionManual:
     solicitud = db.get(Solicitud, solicitud_id)
-    if solicitud is None:
-        raise HTTPException(404, "Solicitud no encontrada")
-    if usuario.rol != RolUsuario.super_admin and solicitud.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Esta solicitud no pertenece a tu inmobiliaria")
+    verificar_tenant_o_404(solicitud, usuario, "solicitud")
 
     ultima_evaluacion = db.execute(
         select(Evaluacion).where(Evaluacion.solicitud_id == solicitud_id).order_by(Evaluacion.evaluado_en.desc())
@@ -66,12 +69,17 @@ def tomar_decision_manual(
     )
     db.add(decision)
 
+    # La maquina de estados valida el salto: una solicitud ya decidida no se re-decide.
     if payload.decision_final.value == "aprobada":
-        solicitud.estado = EstadoSolicitud.aprobada
+        transicionar(db, solicitud, EstadoSolicitud.aprobada, usuario.id, motivo=payload.comentario)
     elif payload.decision_final.value == "rechazada":
-        solicitud.estado = EstadoSolicitud.rechazada
-    # "solicitar_info" no cambia el estado: la solicitud sigue en revision_manual
-    # mientras el solicitante completa lo pedido.
+        transicionar(db, solicitud, EstadoSolicitud.rechazada, usuario.id, motivo=payload.comentario)
+    else:
+        # "solicitar_info" devuelve la solicitud al solicitante: pasa a 'incompleta',
+        # que es el unico estado (junto con borrador) en el que el wizard vuelve a ser
+        # editable. Dejarla en revision_manual la bloqueaba: se le pedia informacion
+        # a alguien que no podia cargarla.
+        transicionar(db, solicitud, EstadoSolicitud.incompleta, usuario.id, motivo=payload.comentario)
 
     registrar(
         db, entidad_tipo="solicitud", entidad_id=solicitud.id, accion="decision_manual_tomada",
@@ -180,10 +188,7 @@ def actualizar_riesgo_anunciante(
     db: Session = Depends(get_db),
 ) -> Anunciante:
     anunciante = db.get(Anunciante, anunciante_id)
-    if anunciante is None:
-        raise HTTPException(404, "Anunciante no encontrado")
-    if usuario.rol != RolUsuario.super_admin and anunciante.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Este anunciante no pertenece a tu inmobiliaria")
+    verificar_tenant_o_404(anunciante, usuario, "anunciante")
 
     score = score_componentes(payload.componentes, OWNER_COMPS)
     anunciante.componentes_riesgo = payload.componentes
@@ -363,10 +368,7 @@ def asignar_analista(
     db: Session = Depends(get_db),
 ) -> Solicitud:
     solicitud = db.get(Solicitud, solicitud_id)
-    if solicitud is None:
-        raise HTTPException(404, "Solicitud no encontrada")
-    if usuario.rol != RolUsuario.super_admin and solicitud.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Esta solicitud no pertenece a tu inmobiliaria")
+    verificar_tenant_o_404(solicitud, usuario, "solicitud")
 
     analista = db.get(Usuario, payload.analista_id)
     if analista is None:

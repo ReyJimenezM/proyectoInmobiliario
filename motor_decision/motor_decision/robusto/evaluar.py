@@ -2,6 +2,14 @@
 derivar()/evaluar() del prototipo Habitat Risk (JS) a Python puro."""
 from __future__ import annotations
 
+from motor_decision.robusto.entidades import nivel_riesgo
+from motor_decision.robusto.reglas_duras import (
+    ContextoReglasDuras,
+    ReglaDura,
+    decision_por_reglas_duras,
+    evaluar_reglas_duras,
+    regla_gobernante,
+)
 from motor_decision.robusto.schemas import (
     EntradaRiesgoArrendatario,
     MotorDecision,
@@ -90,7 +98,15 @@ def _nivel(valor: float, escalones: list[tuple[float, str]]) -> str:
     return escalones[-1][1]
 
 
-def evaluar_motor(entrada: EntradaRiesgoArrendatario, motor: MotorDecision) -> ResultadoMotor:
+def evaluar_motor(
+    entrada: EntradaRiesgoArrendatario,
+    motor: MotorDecision,
+    contexto_duro: ContextoReglasDuras | None = None,
+) -> ResultadoMotor:
+    """Evalua el scorecard y, encima de el, la capa de reglas duras.
+
+    `contexto_duro` es opcional para no romper a los llamadores previos: sin el, el
+    resultado es exactamente el de siempre con decision_driver="PUNTAJE"."""
     d = derivar(entrada, motor.parametros)
 
     base_por_grupo: dict[str, float | None] = {g: None for g in motor.pesos}
@@ -165,6 +181,22 @@ def evaluar_motor(entrada: EntradaRiesgoArrendatario, motor: MotorDecision) -> R
     else:
         decision, motivo = "RECHAZADA", f"Score {score} por debajo del umbral mínimo ({p.umbral_estudio})."
 
+    # --- Capa 3: las reglas duras gobiernan sobre el puntaje ---
+    # Se evaluan DESPUES del score a proposito: el score se calcula y se conserva intacto
+    # (es informacion para el analista), pero no decide cuando hay una regla dura.
+    stops: list[ReglaDura] = evaluar_reglas_duras(contexto_duro) if contexto_duro is not None else []
+    decision_forzada = decision_por_reglas_duras(stops)
+    if decision_forzada is not None:
+        gobernante = regla_gobernante(stops)
+        decision = decision_forzada
+        decision_driver = "REGLA_DURA"
+        motivo = (
+            f"Regla dura {gobernante.codigo} · {gobernante.titulo}: {gobernante.detalle} "
+            "El puntaje no puede superar esta condición."
+        )
+    else:
+        decision_driver = "PUNTAJE"
+
     positivos = [r for r in reglas_activadas if r.regla.puntos >= 60]
     negativos = [r for r in reglas_activadas if r.regla.puntos < 60]
     faltantes = []
@@ -190,4 +222,9 @@ def evaluar_motor(entrada: EntradaRiesgoArrendatario, motor: MotorDecision) -> R
         faltantes=faltantes,
         variables_derivadas=d,
         version=motor.version,
+        decision_driver=decision_driver,
+        reglas_duras=[s.a_dict() for s in stops],
+        nivel_riesgo=nivel_riesgo(int(score)),
+        # probabilidad_incumplimiento / pd_disponible / pd_nota quedan en su default:
+        # no hay modelo estadistico entrenado y no se inventa un numero.
     )

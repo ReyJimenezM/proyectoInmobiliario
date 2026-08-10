@@ -8,7 +8,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
-from app.core.deps import requiere_analista_o_admin
+from app.core.deps import requiere_analista_o_admin, verificar_tenant_o_404
 from app.db.session import get_db
 from app.models.anunciante import Anunciante
 from app.models.enums import EstadoPropiedad, OperacionPropiedad, RolUsuario, TipoPropiedad
@@ -158,10 +158,7 @@ def crear_propiedad(
 
 def _verificar_propiedad_del_tenant(propiedad_id: uuid.UUID, usuario: Usuario, db: Session) -> Propiedad:
     propiedad = db.get(Propiedad, propiedad_id)
-    if propiedad is None:
-        raise HTTPException(404, "Propiedad no encontrada")
-    if usuario.rol != RolUsuario.super_admin and propiedad.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Esta propiedad no pertenece a tu inmobiliaria")
+    verificar_tenant_o_404(propiedad, usuario, "propiedad")
     return propiedad
 
 

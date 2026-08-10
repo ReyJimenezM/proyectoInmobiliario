@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Numeric, Text, DateTime, Enum, ForeignKey, func
+from sqlalchemy import Numeric, String, Text, DateTime, Enum, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,4 +29,12 @@ class Evaluacion(Base):
         Enum(DecisionEvaluacion, name="decision_evaluacion"), nullable=False
     )
     explicacion_generada: Mapped[str] = mapped_column(Text, nullable=False)
+    # Copia de pesos, parametros y reglas activas EN EL MOMENTO de evaluar. Publicar una
+    # version nueva del motor no puede alterar evaluaciones anteriores: las lecturas
+    # historicas leen este snapshot, nunca la configuracion vigente.
+    snapshot_motor: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Reglas duras disparadas: [{codigo, titulo, severidad, detalle}]
+    reglas_duras: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Que gobernó la decision: "PUNTAJE" o "REGLA_DURA".
+    decision_driver: Mapped[str | None] = mapped_column(String(20), nullable=True)
     evaluado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

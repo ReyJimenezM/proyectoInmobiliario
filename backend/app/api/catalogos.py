@@ -6,7 +6,7 @@ en configuraciones_operativas (clave "catalogo:<nombre>").
 """
 import unicodedata
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from app.catalogos import (
     MUNICIPIOS,
 )
 from app.core.deps import requiere_analista_o_admin
+from app.validacion.colombia import buscar_municipios
 from app.db.session import get_db
 from app.models.usuario import Usuario
 from app.services.auditoria import registrar
@@ -64,6 +65,30 @@ def divipola() -> dict:
             {"cod": d["cod"], "nombre": d["nombre"], "municipios": MUNICIPIOS.get(d["cod"], [])}
             for d in DEPARTAMENTOS
         ]
+    }
+
+
+@router.get("/divipola/municipios")
+def municipios(
+    departamento: str | None = None,
+    q: str = "",
+    limite: int = Query(100, ge=1, le=500),
+    desplazamiento: int = Query(0, ge=0),
+) -> dict:
+    """Listado paginado de municipios.
+
+    Colombia tiene 1.122 municipios: mandarlos todos al navegador para llenar un
+    `select` es justo lo que se quiere evitar. La búsqueda `q` ignora tildes
+    ("bogota" encuentra "Bogotá, D.C.") y también acepta el código DIVIPOLA.
+    """
+    pagina, total = buscar_municipios(
+        cod_departamento=departamento, q=q or None, limite=limite, desplazamiento=desplazamiento,
+    )
+    return {
+        "municipios": pagina,
+        "total": total,
+        "limite": limite,
+        "desplazamiento": desplazamiento,
     }
 
 

@@ -1,9 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errores import NoAutorizado
+from app.core.ratelimit import clave_login, limitador_login
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -48,10 +50,22 @@ def registro(payload: RegistroIn, db: Session = Depends(get_db)) -> TokenOut:
 
 
 @router.post("/login", response_model=TokenOut)
-def login(payload: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
+def login(payload: LoginIn, request: Request, db: Session = Depends(get_db)) -> TokenOut:
+    ip = request.client.host if request.client else None
+    clave = clave_login(payload.email, ip)
+
+    # Se verifica *antes* de mirar la contraseña: mientras dure el bloqueo se
+    # rechaza incluso el intento acertado. Si no, la respuesta distinta ante la
+    # contraseña buena le confirmaría al atacante que ya la encontró.
+    limitador_login.verificar(clave)
+
     usuario = db.execute(select(Usuario).where(Usuario.email == payload.email)).scalar_one_or_none()
     if usuario is None or not verify_password(payload.password, usuario.password_hash):
-        raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
+        # Mensaje deliberadamente ambiguo: no revela si el email está registrado.
+        limitador_login.registrar_fallo(clave)
+        raise NoAutorizado("Email o contraseña incorrectos.", codigo="INVALID_CREDENTIALS")
+
+    limitador_login.registrar_exito(clave)
     return _emitir_tokens(usuario)
 
 

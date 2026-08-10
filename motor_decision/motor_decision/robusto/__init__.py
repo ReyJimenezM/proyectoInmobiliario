@@ -8,7 +8,17 @@ from motor_decision.robusto.entidades import (
     score_componentes,
 )
 from motor_decision.robusto.evaluar import derivar, evaluar_motor
+from motor_decision.robusto.reglas_duras import (
+    BLOQUEANTE,
+    REVISION,
+    ContextoReglasDuras,
+    ReglaDura,
+    decision_por_reglas_duras,
+    evaluar_reglas_duras,
+    regla_gobernante,
+)
 from motor_decision.robusto.schemas import (
+    PD_NOTA,
     Codeudor,
     CostoInmueble,
     Documento,
@@ -36,6 +46,14 @@ __all__ = [
     "score_componentes",
     "derivar",
     "evaluar_motor",
+    "BLOQUEANTE",
+    "REVISION",
+    "PD_NOTA",
+    "ContextoReglasDuras",
+    "ReglaDura",
+    "decision_por_reglas_duras",
+    "evaluar_reglas_duras",
+    "regla_gobernante",
     "Codeudor",
     "CostoInmueble",
     "Documento",

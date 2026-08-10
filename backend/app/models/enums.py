@@ -58,6 +58,10 @@ class EstadoSolicitud(str, enum.Enum):
     aprobada = "aprobada"
     rechazada = "rechazada"
     con_ruta_alterna = "con_ruta_alterna"
+    # incompleta: falta informacion (documento obligatorio, dato sin capturar). NO es un
+    # rechazo -- el solicitante completa y vuelve a enviar. cancelada: cierre sin decision.
+    incompleta = "incompleta"
+    cancelada = "cancelada"
 
 
 class EstadoDocumento(str, enum.Enum):

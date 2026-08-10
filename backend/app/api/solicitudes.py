@@ -36,6 +36,7 @@ from app.schemas.solicitud import (
 from app.services import motor_client
 from app.services.auditoria import registrar
 from app.services.checklist_documentos import documentos_requeridos
+from app.services.flujo import ESTADOS_EDITABLES, transicionar, verificar_editable
 
 router = APIRouter(prefix="/api/solicitudes", tags=["solicitudes"])
 
@@ -51,22 +52,29 @@ def _generar_codigo_seguimiento(db: Session) -> str:
             return codigo
 
 
-def _obtener_solicitud_propia_o_403(
+# Mensaje unico para "no existe" y para "existe pero no es tuya". Un 403 distinto del 404
+# confirmaria la existencia del recurso a quien no debe verlo (enumeracion entre tenants).
+_SOLICITUD_NO_EXISTE = "La solicitud no existe."
+
+
+def _obtener_solicitud_propia_o_404(
     solicitud_id: uuid.UUID, usuario: Usuario, db: Session, estados_permitidos: set[EstadoSolicitud] | None = None
 ) -> Solicitud:
     solicitud = db.get(Solicitud, solicitud_id)
     if solicitud is None:
-        raise HTTPException(404, "Solicitud no encontrada")
+        raise HTTPException(404, _SOLICITUD_NO_EXISTE)
     if usuario.rol == RolUsuario.solicitante and solicitud.solicitante_id != usuario.id:
-        raise HTTPException(403, "No tienes acceso a esta solicitud")
+        raise HTTPException(404, _SOLICITUD_NO_EXISTE)
     if usuario.rol not in (RolUsuario.solicitante, RolUsuario.super_admin) and solicitud.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Esta solicitud no pertenece a tu inmobiliaria")
+        raise HTTPException(404, _SOLICITUD_NO_EXISTE)
     if estados_permitidos is not None and solicitud.estado not in estados_permitidos:
         raise HTTPException(409, f"La solicitud está en estado '{solicitud.estado.value}' y no admite esta acción")
     return solicitud
 
 
-EDITABLE = {EstadoSolicitud.borrador}
+# Estados en los que el wizard admite edicion (borrador e incompleta), tomados de la
+# maquina de estados para que no se desincronicen.
+EDITABLE = {EstadoSolicitud(e) for e in ESTADOS_EDITABLES}
 
 
 @router.post("", response_model=SolicitudOut, status_code=201)
@@ -100,7 +108,7 @@ def crear_solicitud(
 def obtener_solicitud(
     solicitud_id: uuid.UUID, usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> Solicitud:
-    return _obtener_solicitud_propia_o_403(solicitud_id, usuario, db)
+    return _obtener_solicitud_propia_o_404(solicitud_id, usuario, db)
 
 
 @router.put("/{solicitud_id}/datos-personales", response_model=SolicitudOut)
@@ -108,7 +116,8 @@ def actualizar_datos_personales(
     solicitud_id: uuid.UUID, payload: DatosPersonalesIn,
     usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> Solicitud:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db, EDITABLE)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db, EDITABLE)
+    verificar_editable(solicitud)
     antes = dict(solicitud.datos_personales)
     solicitud.datos_personales = payload.model_dump(mode="json")
     registrar(
@@ -125,7 +134,8 @@ def actualizar_datos_laborales(
     solicitud_id: uuid.UUID, payload: DatosLaboralesIn,
     usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> Solicitud:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db, EDITABLE)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db, EDITABLE)
+    verificar_editable(solicitud)
     antes = dict(solicitud.datos_laborales)
     solicitud.datos_laborales = payload.model_dump(mode="json")
     registrar(
@@ -142,7 +152,8 @@ def actualizar_datos_financieros(
     solicitud_id: uuid.UUID, payload: DatosFinancierosIn,
     usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> Solicitud:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db, EDITABLE)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db, EDITABLE)
+    verificar_editable(solicitud)
     antes = dict(solicitud.datos_financieros)
     solicitud.datos_financieros = payload.model_dump(mode="json")
     registrar(
@@ -159,7 +170,8 @@ def actualizar_garantias_referencias(
     solicitud_id: uuid.UUID, payload: GarantiasReferenciasIn,
     usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> Solicitud:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db, EDITABLE)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db, EDITABLE)
+    verificar_editable(solicitud)
     antes = dict(solicitud.garantias_referencias)
     solicitud.garantias_referencias = payload.model_dump(mode="json")
     registrar(
@@ -175,7 +187,7 @@ def actualizar_garantias_referencias(
 def obtener_checklist_documentos(
     solicitud_id: uuid.UUID, usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> dict:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db)
     requeridos = documentos_requeridos(solicitud.datos_laborales, solicitud.garantias_referencias, solicitud.vertical.value)
     cargados = set(
         db.execute(
@@ -190,19 +202,21 @@ def enviar_solicitud(
     solicitud_id: uuid.UUID, payload: EnviarSolicitudIn,
     usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db),
 ) -> ResultadoSolicitudOut:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db, EDITABLE)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db, EDITABLE)
 
     if not solicitud.datos_personales or not solicitud.datos_laborales or not solicitud.datos_financieros \
             or not solicitud.garantias_referencias:
         raise HTTPException(422, "Completa todos los pasos del formulario antes de enviar la solicitud")
 
-    solicitud.estado = EstadoSolicitud.enviada
+    # borrador|incompleta -> enviada -> en_evaluacion -> decision. Cada salto pasa por la
+    # maquina de estados: si alguno no fuera valido, se corta aqui y no se evalua nada.
+    transicionar(db, solicitud, EstadoSolicitud.enviada, usuario.id, motivo="Envío del formulario")
     registrar(
         db, entidad_tipo="solicitud", entidad_id=solicitud.id, accion="enviada",
         actor_id=usuario.id, payload_despues={"acepta_politica_datos": payload.acepta_politica_datos},
     )
 
-    solicitud.estado = EstadoSolicitud.en_evaluacion
+    transicionar(db, solicitud, EstadoSolicitud.en_evaluacion, usuario.id, motivo="Inicio de la evaluación")
 
     if solicitud.vertical.value == "arriendo":
         # Vertical arriendo: motor robusto de 37 reglas (F2-B2), portado de Habitat Risk.
@@ -221,7 +235,7 @@ def enviar_solicitud(
         evaluacion, estado_sugerido = motor_client.evaluar_solicitud_robusto(
             db, solicitud, motor_activo, propiedad, documentos_cargados
         )
-        solicitud.estado = estado_sugerido
+        transicionar(db, solicitud, estado_sugerido, None, motivo=f"Decisión automática ({evaluacion.decision_driver})")
         motor_id_log = str(motor_activo.id)
     else:
         # Vertical compra: motor 5C original (Bloque 2), sigue vigente para hipotecario.
@@ -236,11 +250,12 @@ def enviar_solicitud(
 
         evaluacion = motor_client.evaluar_solicitud(db, solicitud, politica_activa)
         if evaluacion.decision.value == "aprobada":
-            solicitud.estado = EstadoSolicitud.aprobada
+            estado_sugerido = EstadoSolicitud.aprobada
         elif evaluacion.decision.value == "rechazada":
-            solicitud.estado = EstadoSolicitud.rechazada
+            estado_sugerido = EstadoSolicitud.rechazada
         else:
-            solicitud.estado = EstadoSolicitud.revision_manual
+            estado_sugerido = EstadoSolicitud.revision_manual
+        transicionar(db, solicitud, estado_sugerido, None, motivo="Decisión automática (PUNTAJE)")
         motor_id_log = str(politica_activa.id)
 
     registrar(
@@ -258,7 +273,7 @@ def enviar_solicitud(
 def obtener_resultado(
     solicitud_id: uuid.UUID, usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> ResultadoSolicitudOut:
-    solicitud = _obtener_solicitud_propia_o_403(solicitud_id, usuario, db)
+    solicitud = _obtener_solicitud_propia_o_404(solicitud_id, usuario, db)
     ultima_evaluacion = db.execute(
         select(Evaluacion).where(Evaluacion.solicitud_id == solicitud_id).order_by(Evaluacion.evaluado_en.desc())
     ).scalars().first()
@@ -360,12 +375,13 @@ def consultar_estado(payload: ConsultarEstadoIn, db: Session = Depends(get_db)) 
     )
 
 
-def _obtener_solicitud_staff_o_403(solicitud_id: uuid.UUID, usuario: Usuario, db: Session) -> Solicitud:
+def _obtener_solicitud_staff_o_404(solicitud_id: uuid.UUID, usuario: Usuario, db: Session) -> Solicitud:
     solicitud = db.get(Solicitud, solicitud_id)
     if solicitud is None:
-        raise HTTPException(404, "Solicitud no encontrada")
+        raise HTTPException(404, _SOLICITUD_NO_EXISTE)
     if usuario.rol != RolUsuario.super_admin and solicitud.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Esta solicitud no pertenece a tu inmobiliaria")
+        # 404, no 403: para el staff de otra inmobiliaria esta solicitud no existe.
+        raise HTTPException(404, _SOLICITUD_NO_EXISTE)
     return solicitud
 
 
@@ -376,7 +392,7 @@ def agregar_comentario(
     usuario: Usuario = Depends(requiere_staff),
     db: Session = Depends(get_db),
 ) -> ComentarioSolicitud:
-    _obtener_solicitud_staff_o_403(solicitud_id, usuario, db)
+    _obtener_solicitud_staff_o_404(solicitud_id, usuario, db)
 
     comentario = ComentarioSolicitud(
         id=uuid.uuid4(), solicitud_id=solicitud_id, usuario_id=usuario.id, texto=payload.texto,
@@ -395,7 +411,7 @@ def agregar_comentario(
 def listar_comentarios(
     solicitud_id: uuid.UUID, usuario: Usuario = Depends(requiere_staff), db: Session = Depends(get_db)
 ) -> list[ComentarioSolicitud]:
-    _obtener_solicitud_staff_o_403(solicitud_id, usuario, db)
+    _obtener_solicitud_staff_o_404(solicitud_id, usuario, db)
     return list(
         db.execute(
             select(ComentarioSolicitud)

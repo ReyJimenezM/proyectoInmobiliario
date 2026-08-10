@@ -61,29 +61,21 @@ const FEATURES_DATASET: FeatureFila[] = [
 const CATEGORIAS_OUTCOME = [
   {
     nombre: "Pago puntual",
-    count: 51,
-    pct: 75,
     color: "bg-emerald-500",
     aprende: "Refuerza los perfiles con alta cobertura e ingresos verificados: sus pesos suben en el reentrenamiento.",
   },
   {
     nombre: "Mora leve (<30 días)",
-    count: 11,
-    pct: 16,
     color: "bg-amber-500",
     aprende: "Ajusta las bandas intermedias: señales de flujo justo post-arriendo ganan peso predictivo.",
   },
   {
     nombre: "Mora grave (>60 días)",
-    count: 4,
-    pct: 6,
     color: "bg-rose-500",
     aprende: "Endurece los umbrales para combinaciones de baja verificabilidad y endeudamiento alto.",
   },
   {
     nombre: "Restitución",
-    count: 2,
-    pct: 3,
     color: "bg-rose-700",
     aprende: "Casos etiquetados como default definitivo: la variable objetivo del modelo probabilístico.",
   },
@@ -499,10 +491,16 @@ function TabOutcomes() {
         Esos resultados observados son la materia prima con la que se contrasta el score y se recalibra el motor.
       </p>
 
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <b className="font-semibold">Todavía no hay outcomes registrados.</b> Estos indicadores aparecerán cuando
+        empiecen a cargarse resultados reales de contratos. Publicar una precisión o una tasa de mora antes de
+        tenerlas medidas sería inventar estadística: por eso se muestran vacíos y no con cifras de ejemplo.
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KPI titulo="Contratos con seguimiento" valor="68" subtitulo="Con eventos post-decisión registrados" />
-        <KPI titulo="Tasa de mora observada" valor="4.4%" subtitulo="Sobre contratos iniciados" color="text-amber-600" />
-        <KPI titulo="Precisión del score" valor="87%" subtitulo="Decisiones consistentes con el outcome" color="text-emerald-600" />
+        <KPI titulo="Contratos con seguimiento" valor="—" subtitulo="Sin eventos post-decisión registrados" />
+        <KPI titulo="Tasa de mora observada" valor="—" subtitulo="Requiere contratos iniciados" />
+        <KPI titulo="Precisión del score" valor="—" subtitulo="Requiere outcomes para contrastar" />
       </div>
 
       <div className="rounded-xl border border-ink-100 bg-white shadow-sm">
@@ -514,8 +512,6 @@ function TabOutcomes() {
             <thead className="bg-ink-50 text-left text-xs uppercase text-ink-500">
               <tr>
                 <th className="px-4 py-2">Categoría</th>
-                <th className="px-4 py-2">Contratos</th>
-                <th className="px-4 py-2">%</th>
                 <th className="px-4 py-2">Qué aprende el modelo</th>
               </tr>
             </thead>
@@ -528,8 +524,6 @@ function TabOutcomes() {
                       {c.nombre}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-semibold text-ink-800">{c.count}</td>
-                  <td className="px-4 py-3 text-ink-500">{c.pct}%</td>
                   <td className="px-4 py-3 text-ink-500">{c.aprende}</td>
                 </tr>
               ))}

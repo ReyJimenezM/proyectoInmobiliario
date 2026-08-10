@@ -148,13 +148,22 @@ class SubscoreGrupo:
     nivel: str
 
 
+# Texto unico y literal sobre la probabilidad de incumplimiento. No se calcula ni se
+# estima: exige un historico de contratos y eventos de mora que la plataforma todavia
+# no tiene. Inventar un numero aqui seria presentar una opinion como si fuera un modelo.
+PD_NOTA = (
+    "La probabilidad de incumplimiento no está disponible: requiere un histórico de "
+    "contratos y eventos de mora que aún no existe. El puntaje no es una probabilidad."
+)
+
+
 @dataclass(frozen=True)
 class ResultadoMotor:
     score: int
     subscores: dict[str, int]
     niveles: dict[str, str]
     reglas_activadas: list[ReglaActivada]
-    decision: str  # PREAPROBADA | REQUISITOS | ESTUDIO | RECHAZADA
+    decision: str  # PREAPROBADA | REQUISITOS | ESTUDIO | RECHAZADA | REVISION_MANUAL | INCOMPLETA
     motivo: str
     requiere_codeudor: bool
     positivos: list[ReglaActivada]
@@ -162,3 +171,27 @@ class ResultadoMotor:
     faltantes: list[str]
     variables_derivadas: dict[str, float]
     version: str
+    # --- Capa 3 (reglas duras) y trazabilidad. Con defaults: los consumidores previos
+    # siguen construyendo/leyendo ResultadoMotor exactamente igual que antes. ---
+    decision_driver: str = "PUNTAJE"  # PUNTAJE | REGLA_DURA
+    reglas_duras: list[dict] = field(default_factory=list)
+    nivel_riesgo: str = ""
+    # Capa 5 (modelo estadistico): deliberadamente inactiva. Ver PD_NOTA.
+    probabilidad_incumplimiento: None = None
+    pd_disponible: bool = False
+    pd_nota: str = PD_NOTA
+
+    @property
+    def reglas_disparadas(self) -> list[str]:
+        """Ids de las reglas del scorecard que se activaron."""
+        return [ra.regla.id for ra in self.reglas_activadas]
+
+    @property
+    def variables(self) -> dict[str, float]:
+        """Alias estable de `variables_derivadas`."""
+        return self.variables_derivadas
+
+    @property
+    def explicacion(self) -> str:
+        """Alias estable de `motivo`."""
+        return self.motivo

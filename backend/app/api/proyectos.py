@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import requiere_analista_o_admin
+from app.core.deps import requiere_analista_o_admin, verificar_tenant_o_404
 from app.db.session import get_db
 from app.models.enums import RolUsuario, TipoPropiedad
 from app.models.proyecto import Proyecto
@@ -67,10 +67,7 @@ def crear_proyecto(
 
 def _verificar_proyecto_del_tenant(proyecto_id: uuid.UUID, usuario: Usuario, db: Session) -> Proyecto:
     proyecto = db.get(Proyecto, proyecto_id)
-    if proyecto is None:
-        raise HTTPException(404, "Proyecto no encontrado")
-    if usuario.rol != RolUsuario.super_admin and proyecto.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Este proyecto no pertenece a tu inmobiliaria")
+    verificar_tenant_o_404(proyecto, usuario, "proyecto")
     return proyecto
 
 

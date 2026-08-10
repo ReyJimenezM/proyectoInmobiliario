@@ -52,6 +52,38 @@ requiere_super_admin = requiere_roles(RolUsuario.super_admin)
 requiere_admin_tenant = requiere_roles(RolUsuario.super_admin, RolUsuario.admin)
 
 
+# --- Aislamiento entre inmobiliarias -------------------------------------------------
+# Cruzar tenants responde 404, no 403. Un 403 ("esta solicitud no pertenece a tu
+# inmobiliaria") confirma que el recurso EXISTE: permite enumerar ids ajenos y contar
+# volumen de la competencia. Para quien no tiene acceso, el recurso simplemente no existe.
+# Excepcion deliberada: los errores de ROL siguen siendo 403 -- ahi el recurso es visible
+# para ese usuario, lo que no esta permitido es la accion.
+NO_EXISTE = {
+    "solicitud": "La solicitud no existe.",
+    "propiedad": "La propiedad no existe.",
+    "anunciante": "El anunciante no existe.",
+    "propietario": "El propietario no existe.",
+    "proyecto": "El proyecto no existe.",
+    "documento": "El documento no existe.",
+}
+
+
+def mensaje_no_existe(entidad: str) -> str:
+    """Mensaje unico para 'no existe' y para 'existe pero es de otra inmobiliaria'."""
+    return NO_EXISTE.get(entidad, "El recurso no existe.")
+
+
+def verificar_tenant_o_404(recurso, usuario: Usuario, entidad: str) -> None:
+    """Lanza 404 si el recurso es de otra inmobiliaria (o si es None). El super_admin
+    atraviesa todos los tenants."""
+    if recurso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=mensaje_no_existe(entidad))
+    if usuario.rol == RolUsuario.super_admin:
+        return
+    if getattr(recurso, "inmobiliaria_id", None) != usuario.inmobiliaria_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=mensaje_no_existe(entidad))
+
+
 def tenant_id_o_none(usuario: Usuario) -> uuid.UUID | None:
     """Los super_admin ven todas las inmobiliarias (sin filtro); el resto del staff
     queda limitado a la suya. Usar como: filtro = tenant_id_o_none(usuario); si no es

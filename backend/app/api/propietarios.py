@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import requiere_analista_o_admin, requiere_staff, tenant_id_o_none
+from app.core.deps import (
+    requiere_analista_o_admin,
+    requiere_staff,
+    tenant_id_o_none,
+    verificar_tenant_o_404,
+)
 from app.db.session import get_db
 from app.models.enums import RolUsuario
 from app.models.propietario import Propietario
@@ -19,10 +24,7 @@ router = APIRouter(prefix="/api/admin/propietarios", tags=["propietarios"])
 
 def _verificar_propietario_del_tenant(propietario_id: uuid.UUID, usuario: Usuario, db: Session) -> Propietario:
     propietario = db.get(Propietario, propietario_id)
-    if propietario is None:
-        raise HTTPException(404, "Propietario no encontrado")
-    if usuario.rol != RolUsuario.super_admin and propietario.inmobiliaria_id != usuario.inmobiliaria_id:
-        raise HTTPException(403, "Este propietario no pertenece a tu inmobiliaria")
+    verificar_tenant_o_404(propietario, usuario, "propietario")
     return propietario
 
 

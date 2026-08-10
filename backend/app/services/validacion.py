@@ -1,16 +1,18 @@
-"""Motor de calidad de dato y validación en 3 capas (portado del prototipo habitat-risk).
+"""Calidad de dato y validación en 3 capas sobre una solicitud.
 
-Capa 1 · Validación de campos: formato y rangos de lo capturado en la solicitud.
-Capa 2 · Consistencia: relaciones entre datos (gastos vs ingresos, edad vs antigüedad,
-         codeudor vs solicitante, correo desechable, canon vs ingreso, etc.).
-Capa 3 · Reglas: documentos requeridos por perfil sin cargar o rechazados y decisiones
-         del motor desactualizadas frente a la última edición del expediente.
+Este módulo ya **no** contiene las reglas: es el adaptador entre el expediente
+guardado (SQLAlchemy) y los motores declarativos de `app/validacion`:
 
-Además calcula la calidad del dato campo a campo (declarado / con soporte / verificado /
-inconsistente / sin verificar) y un índice de verificabilidad 0-100.
+Capa 1 · Campos     → `app.validacion.motor` sobre `app.validacion.especificaciones`
+Capa 2 · Consistencia → `app.validacion.consistencia` (registro con @comprobacion)
+Capa 3 · Reglas      → documentos requeridos por perfil y decisión desactualizada
+
+La forma de la respuesta de `validar_solicitud` no cambia
+(`{hallazgos, calidad, verificabilidad, resumen}`): el frontend desplegado y la
+trazabilidad la consumen tal cual. Los tipos nuevos se traducen a los que la API
+ya devolvía.
 """
 import re
-from datetime import date
 from typing import Any
 
 from app.models.documento_solicitud import DocumentoSolicitud
@@ -18,9 +20,26 @@ from app.models.enums import EstadoDocumento
 from app.models.evaluacion import Evaluacion
 from app.models.solicitud import Solicitud
 from app.services.checklist_documentos import documentos_requeridos
+from app.validacion import ESPECIFICACIONES, EntradaConsistencia, ejecutar, motor
+from app.validacion.colombia import (
+    MAX_RAZONABLE_ARRIENDO,
+    MAX_RAZONABLE_GASTO,
+    MAX_RAZONABLE_INGRESO,
+    NO_NUMERICO,
+    a_fecha,
+    parsear_moneda,
+)
+from app.validacion.colombia import dv_nit as nit_dv  # noqa: F401  (compatibilidad)
+from app.validacion.motor import (
+    ADVERTENCIA,
+    CONTRADICTORIO,
+    FALTANTE,
+    INVALIDO,
+    SIN_VERIFICAR,
+)
 
 # ---------------------------------------------------------------------------
-# Tipos de hallazgo (etiqueta, severidad y acción sugerida, portados del prototipo)
+# Tipos de hallazgo que expone la API (no se tocan: el frontend los conoce)
 # ---------------------------------------------------------------------------
 FINDING_TIPOS: dict[str, dict] = {
     "ERROR_DIGITACION": {
@@ -49,6 +68,35 @@ FINDING_TIPOS: dict[str, dict] = {
     },
 }
 
+#: Traducción de los tipos del motor de consistencia a los tipos de la API.
+_TIPO_API: dict[str, str] = {
+    "ERROR_DIGITACION": "ERROR_DIGITACION",
+    "VALOR_INUSUAL": "DATO_INUSUAL",
+    "SIN_VERIFICAR": "NO_VERIFICADO",
+    "DOCUMENTO_INSUFICIENTE": "DOC_INSUFICIENTE",
+    "INCONSISTENCIA": "INCONSISTENCIA",
+    "ALERTA_FRAUDE": "ALERTA_FRAUDE",
+    "FRAUDE_CONFIRMADO": "ALERTA_FRAUDE",
+}
+
+#: Traducción de los estados de campo (capa 1) a los tipos de la API.
+#: FALTANTE no es un error de digitación: es un dato que todavía no se pidió.
+_TIPO_API_ESTADO: dict[str, str] = {
+    INVALIDO: "ERROR_DIGITACION",
+    CONTRADICTORIO: "INCONSISTENCIA",
+    ADVERTENCIA: "DATO_INUSUAL",
+    FALTANTE: "NO_VERIFICADO",
+    SIN_VERIFICAR: "NO_VERIFICADO",
+}
+
+_TITULO_ESTADO: dict[str, str] = {
+    INVALIDO: "{etiqueta}: el dato no es válido",
+    CONTRADICTORIO: "{etiqueta}: contradice otro dato del expediente",
+    ADVERTENCIA: "{etiqueta}: valor inusual",
+    FALTANTE: "Falta un dato obligatorio: {etiqueta_min}",
+    SIN_VERIFICAR: "{etiqueta}: se toma como declarada",
+}
+
 # Estados de calidad del dato con su peso en la verificabilidad.
 ESTADOS_DATO: dict[str, dict] = {
     "verificado": {"etiqueta": "Verificado", "peso": 1.0},
@@ -58,92 +106,84 @@ ESTADOS_DATO: dict[str, dict] = {
     "inconsistente": {"etiqueta": "Inconsistente", "peso": 0.2},
 }
 
-# Topes de razonabilidad (COP mensuales).
-MAX_RAZONABLE = {"ingreso": 120_000_000, "gasto": 60_000_000, "arriendo": 60_000_000}
-
-# Reglas de número de documento por tipo (el formulario captura la etiqueta larga).
-_DOC_RULES: dict[str, tuple[re.Pattern, str]] = {
-    "CC": (re.compile(r"^\d{6,10}$"), "La cédula de ciudadanía debe tener entre 6 y 10 números, sin puntos."),
-    "CE": (re.compile(r"^\d{6,7}$"), "La cédula de extranjería debe tener entre 6 y 7 números."),
-    "PPT": (re.compile(r"^\d{7,11}$"), "El PPT debe tener entre 7 y 11 números."),
-    "PA": (re.compile(r"^[A-Za-z0-9]{5,15}$"), "El pasaporte tiene entre 5 y 15 caracteres, letras y números."),
-    "NIT": (re.compile(r"^\d{5,15}-?\d?$"), "El NIT debe tener entre 5 y 15 números y su dígito de verificación."),
-}
-_TIPO_DOC_ALIAS = {
-    "cédula de ciudadanía": "CC", "cedula de ciudadania": "CC", "cc": "CC",
-    "cédula de extranjería": "CE", "cedula de extranjeria": "CE", "ce": "CE",
-    "pasaporte": "PA", "pa": "PA",
-    "permiso por protección temporal": "PPT", "permiso por proteccion temporal": "PPT", "ppt": "PPT",
-    "nit": "NIT",
+# Topes de razonabilidad (COP mensuales), ahora declarados en app/validacion/colombia.py.
+MAX_RAZONABLE = {
+    "ingreso": MAX_RAZONABLE_INGRESO,
+    "gasto": MAX_RAZONABLE_GASTO,
+    "arriendo": MAX_RAZONABLE_ARRIENDO,
 }
 
-_EMAIL_RE = re.compile(r"^[^\s@]+@[a-z0-9.-]+\.[a-z]{2,}$", re.IGNORECASE)
-_DOMINIOS_DESECHABLES = {
-    "mailinator.com", "yopmail.com", "guerrillamail.com", "10minutemail.com", "temp-mail.org",
-    "tempmail.com", "trashmail.com", "getnada.com", "sharklasers.com", "dispostable.com",
-    "maildrop.cc", "mintemail.com", "throwawaymail.com", "fakeinbox.com", "mohmal.com",
-}
+#: Documentos que permiten contrastar el ingreso declarado.
+_DOCS_INGRESO = (
+    "desprendibles_pago_o_certificacion_laboral",
+    "certificado_pension_vigente",
+    "declaracion_renta",
+    "rut",
+)
+_DOCS_EXTRACTOS = ("extractos_bancarios_3_meses",)
 
-_SALARIO_MINIMO_REFERENCIA = 1_300_000  # referencia de plausibilidad, no dato normativo
+#: Qué campos del wizard vive en cada sección de la solicitud.
+_CAMPOS_POR_SECCION: dict[str, tuple[str, ...]] = {
+    "datos_personales": (
+        "nombres_apellidos", "tipo_documento", "numero_documento", "fecha_nacimiento",
+        "estado_civil", "personas_a_cargo", "telefono", "email", "direccion_residencia",
+        "ciudad_residencia", "cod_departamento_residencia", "cod_municipio_residencia",
+        "tiempo_residencia", "es_propietario",
+    ),
+    "datos_laborales": (
+        "tipo_ocupacion", "empresa", "nit_empleador", "cargo", "fecha_ingreso_laboral",
+        "antiguedad_cargo_meses", "antiguedad_laboral_anios", "telefono_verificacion",
+        "actividad_economica", "codigo_ciiu", "sector", "antiguedad_negocio_meses",
+    ),
+    "datos_financieros": (
+        "ingresos_mensuales_fijos", "ingresos_variables", "ingresos_otros",
+        "descripcion_ingresos_variables", "deducciones_nomina", "ingreso_no_verificable",
+        "gastos_mensuales_fijos", "tiene_otros_creditos", "tiene_ahorros", "monto_ahorros",
+        "autorizacion_centrales_riesgo",
+    ),
+    "garantias_referencias": (
+        "tiene_codeudor", "tiene_poliza", "ha_arrendado_antes", "mora_en_arriendo_anterior",
+        "proceso_restitucion_previo",
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
-# Utilidades
+# Utilidades (se mantienen: las consume app/api/validacion.py)
 # ---------------------------------------------------------------------------
 def to_number(v: Any) -> float | None:
-    """Convierte cualquier entrada a número puro; None si viene vacía, NaN-like si no aplica."""
+    """Convierte cualquier entrada a número puro; None si viene vacía o no aplica.
+
+    Delega en `parsear_moneda` para que "$3.000.000" y 3000000 den lo mismo: la
+    presentación con separador de miles nunca debe leerse como tres pesos.
+    """
     if isinstance(v, bool):
         return None
-    if isinstance(v, (int, float)):
-        return float(v)
-    if v is None:
+    numero = parsear_moneda(v)
+    if numero is None or numero is NO_NUMERICO:
         return None
-    s = str(v).strip()
-    if s == "":
-        return None
-    limpio = re.sub(r"[^\d,.\-]", "", s).replace(",", ".")
-    try:
-        return float(limpio)
-    except ValueError:
-        return None
+    return float(numero)
 
 
-def nit_dv(base: str) -> int | None:
-    """Dígito de verificación del NIT (algoritmo DIAN)."""
-    pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71]
-    digitos = re.sub(r"\D", "", str(base))
-    if not digitos or len(digitos) > 15:
-        return None
-    suma = sum(int(d) * pesos[i] for i, d in enumerate(reversed(digitos)))
-    resto = suma % 11
-    return resto if resto < 2 else 11 - resto
-
-
-def _edad_desde(fecha_iso: str | None) -> int | None:
-    if not fecha_iso:
-        return None
-    try:
-        nacimiento = date.fromisoformat(str(fecha_iso)[:10])
-    except ValueError:
-        return None
-    hoy = date.today()
-    return hoy.year - nacimiento.year - ((hoy.month, hoy.day) < (nacimiento.month, nacimiento.day))
-
-
-def _tipo_doc_corto(tipo_largo: str | None) -> str | None:
-    return _TIPO_DOC_ALIAS.get(str(tipo_largo or "").strip().lower())
-
-
-def nuevo_hallazgo(tipo: str, titulo: str, detalle: str, campos: list[str] | None = None) -> dict:
+def nuevo_hallazgo(
+    tipo: str,
+    titulo: str,
+    detalle: str,
+    campos: list[str] | None = None,
+    codigo: str | None = None,
+    severidad: int | None = None,
+    accion: str | None = None,
+) -> dict:
     meta = FINDING_TIPOS[tipo]
     return {
         "tipo": tipo,
         "tipo_etiqueta": meta["etiqueta"],
-        "severidad": meta["severidad"],
+        "severidad": severidad if severidad is not None else meta["severidad"],
         "titulo": titulo,
         "detalle": detalle,
         "campos": campos or [],
-        "accion": meta["accion"],
+        "accion": accion or meta["accion"],
+        "codigo": codigo or "",
     }
 
 
@@ -159,198 +199,187 @@ def _cuotas_obligaciones(fin: dict) -> float:
     return sum((to_number(c.get("cuota_mensual")) or 0) for c in fin.get("otros_creditos") or [])
 
 
-# ---------------------------------------------------------------------------
-# CAPA 1 · Validación de campos
-# ---------------------------------------------------------------------------
-def capa_validacion(solicitud: Solicitud) -> list[dict]:
-    hallazgos: list[dict] = []
-    per = solicitud.datos_personales or {}
-    fin = solicitud.datos_financieros or {}
-
-    # Correo electrónico
-    email = str(per.get("email") or "").strip().lower()
-    if email and not _EMAIL_RE.match(email):
-        hallazgos.append(nuevo_hallazgo(
-            "ERROR_DIGITACION", "Correo electrónico con formato inválido",
-            f"El correo registrado ({email}) no tiene un formato válido.", ["email"],
-        ))
-
-    # Teléfono: celular de 10 dígitos que empieza por 3, o fijo con indicativo 60X.
-    telefono = re.sub(r"\D", "", str(per.get("telefono") or ""))
-    if telefono:
-        es_celular = len(telefono) == 10 and telefono.startswith("3")
-        es_fijo = len(telefono) == 10 and telefono.startswith("60")
-        if not (es_celular or es_fijo):
-            hallazgos.append(nuevo_hallazgo(
-                "ERROR_DIGITACION", "Teléfono con formato inválido",
-                "En Colombia los celulares tienen 10 dígitos y empiezan por 3; los fijos usan el indicativo 60.",
-                ["telefono"],
-            ))
-
-    # Número de documento según tipo
-    tipo = _tipo_doc_corto(per.get("tipo_documento"))
-    numero = re.sub(r"[.\s]", "", str(per.get("numero_documento") or ""))
-    if tipo and numero:
-        regla = _DOC_RULES.get(tipo)
-        if regla and not regla[0].match(numero):
-            hallazgos.append(nuevo_hallazgo(
-                "ERROR_DIGITACION", "Número de documento con formato inválido", regla[1], ["numero_documento"],
-            ))
-        elif tipo == "NIT":
-            base, _, dv = numero.partition("-")
-            if dv and nit_dv(base) != int(dv):
-                hallazgos.append(nuevo_hallazgo(
-                    "ERROR_DIGITACION", "Dígito de verificación del NIT no coincide",
-                    f"El dígito informado ({dv}) no corresponde al calculado con el algoritmo DIAN ({nit_dv(base)}).",
-                    ["numero_documento"],
-                ))
-
-    # Edad 18-84
-    edad = _edad_desde(per.get("fecha_nacimiento"))
-    if edad is not None and (edad < 18 or edad > 84):
-        hallazgos.append(nuevo_hallazgo(
-            "INCONSISTENCIA" if edad < 18 else "ERROR_DIGITACION",
-            "Edad fuera de rango",
-            f"La fecha de nacimiento implica una edad de {edad} años; el rango admitido es 18 a 84.",
-            ["fecha_nacimiento"],
-        ))
-
-    # Montos: no negativos y dentro de topes razonables
-    montos = {
-        "ingresos_mensuales_fijos": ("ingreso", "Ingresos fijos"),
-        "ingresos_variables": ("ingreso", "Ingresos variables"),
-        "ingresos_otros": ("ingreso", "Otros ingresos"),
-        "gastos_mensuales_fijos": ("gasto", "Gastos mensuales"),
-        "deducciones_nomina": ("gasto", "Deducciones de nómina"),
-        "monto_ahorros": (None, "Ahorros"),
+def _secciones(solicitud: Solicitud) -> dict[str, dict]:
+    return {
+        "datos_personales": solicitud.datos_personales or {},
+        "datos_laborales": solicitud.datos_laborales or {},
+        "datos_financieros": solicitud.datos_financieros or {},
+        "garantias_referencias": solicitud.garantias_referencias or {},
     }
-    for campo, (tope, etiqueta) in montos.items():
-        n = to_number(fin.get(campo))
-        if n is None:
+
+
+# ---------------------------------------------------------------------------
+# CAPA 1 · Validación de campos (delegada en el motor declarativo)
+# ---------------------------------------------------------------------------
+def _payload_y_colecciones(solicitud: Solicitud) -> tuple[dict, dict[str, list[dict]]]:
+    """Aplana el expediente al vocabulario de `ESPECIFICACIONES`.
+
+    Solo se exige lo obligatorio de las secciones que el solicitante ya tocó: un
+    expediente a medio diligenciar no debe llenarse de campos «faltantes» que
+    todavía no se le han pedido.
+    """
+    secciones = _secciones(solicitud)
+    payload: dict[str, Any] = {}
+    for seccion, campos in _CAMPOS_POR_SECCION.items():
+        datos = secciones[seccion]
+        if not datos:
             continue
-        if n < 0:
-            hallazgos.append(nuevo_hallazgo(
-                "ERROR_DIGITACION", f"{etiqueta} con valor negativo",
-                f"{etiqueta} no puede ser un valor negativo (${n:,.0f}).", [campo],
-            ))
-        elif tope and n > MAX_RAZONABLE[tope]:
-            hallazgos.append(nuevo_hallazgo(
-                "DATO_INUSUAL", f"{etiqueta} inusualmente altos",
-                f"${n:,.0f} supera el tope de razonabilidad (${MAX_RAZONABLE[tope]:,.0f}). "
-                "Si es correcto, se confirmará con los soportes.", [campo],
-            ))
+        for campo in campos:
+            esp = ESPECIFICACIONES[campo]
+            if campo in datos:
+                payload[campo] = datos[campo]
+            elif esp.obligatorio:
+                payload[campo] = None  # se reportará como FALTANTE, no como inválido
 
-    for credito in fin.get("otros_creditos") or []:
-        cuota = to_number(credito.get("cuota_mensual"))
-        if cuota is not None and cuota < 0:
-            hallazgos.append(nuevo_hallazgo(
-                "ERROR_DIGITACION", "Cuota de obligación negativa",
-                f"La obligación con {credito.get('entidad', 'entidad desconocida')} registra una cuota negativa.",
-                ["otros_creditos"],
-            ))
+    fin = secciones["datos_financieros"]
+    gar = secciones["garantias_referencias"]
+    colecciones: dict[str, list[dict]] = {}
+    if fin.get("otros_creditos"):
+        colecciones["otros_creditos"] = [
+            c for c in fin["otros_creditos"] if isinstance(c, dict)
+        ]
+    if isinstance(gar.get("codeudor"), dict):
+        colecciones["codeudor"] = [gar["codeudor"]]
+    for clave in ("referencia_laboral", "referencia_personal", "referencia_arrendador"):
+        if isinstance(gar.get(clave), dict):
+            colecciones[clave] = [gar[clave]]
+    return payload, colecciones
 
+
+def capa_validacion(solicitud: Solicitud) -> list[dict]:
+    """Formato, rango y coherencia interna de cada campo capturado."""
+    payload, colecciones = _payload_y_colecciones(solicitud)
+    informe = motor.validar(payload, colecciones=colecciones, exigir_ausentes=False)
+
+    hallazgos: list[dict] = []
+    for resultado in informe.resultados:
+        tipo = _TIPO_API_ESTADO.get(resultado.estado)
+        if tipo is None:
+            continue
+        etiqueta = resultado.etiqueta or resultado.campo
+        campo_base = resultado.campo.split("[")[0]
+        titulo = _TITULO_ESTADO[resultado.estado].format(
+            etiqueta=etiqueta, etiqueta_min=etiqueta.lower()
+        )
+        if "[" in resultado.campo:
+            indice = resultado.campo.split("[")[1].split("]")[0]
+            titulo = f"{titulo} (registro {int(indice) + 1})"
+        hallazgos.append(nuevo_hallazgo(
+            tipo, titulo, resultado.mensaje or "",
+            campos=sorted({campo_base, resultado.campo}),
+            codigo=resultado.codigo,
+        ))
     return hallazgos
 
 
 # ---------------------------------------------------------------------------
-# CAPA 2 · Consistencia entre datos
+# CAPA 2 · Consistencia entre datos (delegada en el registro de comprobaciones)
 # ---------------------------------------------------------------------------
-def capa_consistencia(solicitud: Solicitud, canon_mensual: float | None = None) -> list[dict]:
-    hallazgos: list[dict] = []
-    per = solicitud.datos_personales or {}
-    lab = solicitud.datos_laborales or {}
-    fin = solicitud.datos_financieros or {}
-    gar = solicitud.garantias_referencias or {}
+def _entrada_consistencia(
+    solicitud: Solicitud,
+    documentos: list[DocumentoSolicitud],
+    canon_mensual: float | None,
+) -> EntradaConsistencia:
+    secciones = _secciones(solicitud)
+    per, lab, fin, gar = (
+        secciones["datos_personales"], secciones["datos_laborales"],
+        secciones["datos_financieros"], secciones["garantias_referencias"],
+    )
 
     ingreso = _ingreso_total(fin)
-    gastos = to_number(fin.get("gastos_mensuales_fijos")) or 0
+    gastos = (to_number(fin.get("gastos_mensuales_fijos")) or 0) + (
+        to_number(fin.get("deducciones_nomina")) or 0
+    )
     cuotas = _cuotas_obligaciones(fin)
+    canon = float(canon_mensual or 0)
 
-    # Gastos que consumen casi todo el ingreso
-    if ingreso > 0 and gastos > ingreso * 0.9:
-        hallazgos.append(nuevo_hallazgo(
-            "INCONSISTENCIA", "Los gastos consumen casi todo el ingreso",
-            f"Gastos por ${gastos:,.0f} frente a un ingreso declarado de ${ingreso:,.0f} "
-            f"({gastos / ingreso * 100:.0f} %). Puede ser un error de digitación o una situación insostenible.",
-            ["gastos_mensuales_fijos", "ingresos_mensuales_fijos"],
-        ))
+    aprobados = {d.tipo_documento for d in documentos if d.estado == EstadoDocumento.aprobado}
+    rechazados = sorted({
+        d.tipo_documento.replace("_", " ")
+        for d in documentos
+        if d.estado == EstadoDocumento.rechazado
+    })
+    # Sin certificación aprobada no hay con qué contrastar el ingreso declarado.
+    certificado = int(ingreso) if any(t in aprobados for t in _DOCS_INGRESO) else None
+    bancarizado = int(ingreso) if any(t in aprobados for t in _DOCS_EXTRACTOS) else None
 
-    # Ingreso inusual frente a la ocupación declarada
-    ocupacion = str(lab.get("tipo_ocupacion") or "")
-    if ingreso > 0:
-        if ocupacion in ("pensionado",) and ingreso > 30_000_000:
-            hallazgos.append(nuevo_hallazgo(
-                "DATO_INUSUAL", "Ingreso inusualmente alto para un pensionado",
-                f"Declara mesada e ingresos por ${ingreso:,.0f}; se confirmará con la resolución de pensión.",
-                ["ingresos_mensuales_fijos"],
-            ))
-        if ocupacion in ("indefinido", "termino_fijo") and 0 < ingreso < _SALARIO_MINIMO_REFERENCIA * 0.5:
-            hallazgos.append(nuevo_hallazgo(
-                "DATO_INUSUAL", "Ingreso inusualmente bajo para un empleado",
-                f"El ingreso declarado (${ingreso:,.0f}) está muy por debajo de un salario mínimo. "
-                "Verificar que no falten ceros o que la periodicidad no sea quincenal.",
-                ["ingresos_mensuales_fijos"],
-            ))
-
-    # Endeudamiento: cuotas > 60 % del ingreso
-    if ingreso > 0 and cuotas > ingreso * 0.6:
-        hallazgos.append(nuevo_hallazgo(
-            "INCONSISTENCIA", "Endeudamiento muy alto",
-            f"Las cuotas de obligaciones (${cuotas:,.0f}) comprometen el {cuotas / ingreso * 100:.0f} % "
-            "del ingreso declarado.", ["otros_creditos"],
-        ))
-
-    # Edad vs antigüedad laboral imposible
-    edad = _edad_desde(per.get("fecha_nacimiento"))
-    antiguedad = to_number(lab.get("antiguedad_laboral_anios"))
-    if edad is not None and antiguedad is not None and antiguedad > max(edad - 15, 0):
-        hallazgos.append(nuevo_hallazgo(
-            "INCONSISTENCIA", "Antigüedad laboral incompatible con la edad",
-            f"Con {edad} años no es posible acreditar {antiguedad:.0f} años de vida laboral "
-            "(implicaría haber empezado antes de los 15 años).",
-            ["antiguedad_laboral_anios", "fecha_nacimiento"],
-        ))
-
-    # Correo desechable
-    email = str(per.get("email") or "").strip().lower()
-    dominio = email.rsplit("@", 1)[-1] if "@" in email else ""
-    if dominio in _DOMINIOS_DESECHABLES:
-        hallazgos.append(nuevo_hallazgo(
-            "ALERTA_FRAUDE", "Correo electrónico desechable",
-            f"El dominio {dominio} corresponde a un servicio de correos temporales; "
-            "no permite contactar al solicitante de forma confiable.", ["email"],
-        ))
-
-    # Canon/cuota frente al ingreso
-    if canon_mensual and ingreso > 0 and canon_mensual / ingreso > 0.5:
-        hallazgos.append(nuevo_hallazgo(
-            "INCONSISTENCIA", "El canon compromete más de la mitad del ingreso",
-            f"El canon o cuota mensual (${canon_mensual:,.0f}) representa el "
-            f"{canon_mensual / ingreso * 100:.0f} % del ingreso declarado (${ingreso:,.0f}).",
-            ["ingresos_mensuales_fijos"],
-        ))
-
-    # Patrimonio negativo con activos declarados
-    activos = [to_number(v) or 0 for v in fin.get("patrimonio_activos") or []]
-    pasivos = [to_number(v) or 0 for v in fin.get("patrimonio_pasivos") or []]
-    if activos and sum(pasivos) > sum(activos):
-        hallazgos.append(nuevo_hallazgo(
-            "DATO_INUSUAL", "Patrimonio neto negativo",
-            f"Los pasivos declarados (${sum(pasivos):,.0f}) superan los activos (${sum(activos):,.0f}).",
-            ["patrimonio_activos", "patrimonio_pasivos"],
-        ))
-
-    # Codeudor con el mismo documento del solicitante
     codeudor = gar.get("codeudor") or {}
     doc_solicitante = re.sub(r"\D", "", str(per.get("numero_documento") or ""))
     doc_codeudor = re.sub(r"\D", "", str(codeudor.get("documento") or ""))
-    if doc_solicitante and doc_codeudor and doc_solicitante == doc_codeudor:
-        hallazgos.append(nuevo_hallazgo(
-            "ALERTA_FRAUDE", "El codeudor tiene el mismo documento del solicitante",
-            "El solicitante no puede ser su propio codeudor; el documento registrado coincide en ambos roles.",
-            ["numero_documento"],
-        ))
+    compartido = (
+        str(codeudor.get("nombre") or "el codeudor")
+        if doc_solicitante and doc_solicitante == doc_codeudor
+        else None
+    )
 
+    codigo_ciiu = str(lab.get("codigo_ciiu") or "").strip() or None
+
+    return EntradaConsistencia(
+        ingreso_declarado=int(ingreso),
+        ingreso_certificado=certificado,
+        ingreso_bancarizado=bancarizado,
+        ingreso_fijo=int(to_number(fin.get("ingresos_mensuales_fijos")) or 0),
+        ingreso_variable=int(to_number(fin.get("ingresos_variables")) or 0),
+        gastos_totales=int(gastos),
+        cuotas_obligaciones=int(cuotas),
+        costo_vivienda=int(canon),
+        disponible_despues_vivienda=int(ingreso - gastos - cuotas - canon),
+        nit_empleador=str(lab.get("nit_empleador") or "").strip() or None,
+        situacion_laboral=str(lab.get("tipo_ocupacion") or "").strip() or None,
+        codigo_ciiu=codigo_ciiu,
+        seccion_ciiu=str(lab.get("seccion_ciiu") or "").strip() or None,
+        fecha_nacimiento=a_fecha(per.get("fecha_nacimiento")),
+        fecha_ingreso_laboral=a_fecha(lab.get("fecha_ingreso_laboral")),
+        documentos_rechazados=rechazados,
+        documento_compartido_con=compartido,
+        email=str(per.get("email") or "").strip().lower() or None,
+        activos_totales=int(sum(to_number(v) or 0 for v in fin.get("patrimonio_activos") or [])),
+        pasivos_totales=int(sum(to_number(v) or 0 for v in fin.get("patrimonio_pasivos") or [])),
+    )
+
+
+#: Campos del expediente que ilumina cada comprobación (para la calidad del dato).
+_CAMPOS_POR_COMPROBACION: dict[str, list[str]] = {
+    "INGRESO_VS_CERTIFICADO": ["ingresos_mensuales_fijos"],
+    "INGRESO_SIN_SOPORTE": ["ingresos_mensuales_fijos"],
+    "INGRESO_VARIABLE_DESPROPORCIONADO": ["ingresos_variables", "ingresos_mensuales_fijos"],
+    "INGRESO_VS_OCUPACION": ["ingresos_mensuales_fijos"],
+    "GASTOS_SUPERAN_INGRESO": ["gastos_mensuales_fijos", "ingresos_mensuales_fijos"],
+    "ENDEUDAMIENTO_ALTO": ["otros_creditos"],
+    "VIVIENDA_SUPERA_CAPACIDAD": ["ingresos_mensuales_fijos"],
+    "NIT_EMPLEADOR": ["nit_empleador", "empresa"],
+    "CIIU_VS_SITUACION": ["actividad_economica"],
+    "FECHA_LABORAL_VS_NACIMIENTO": ["fecha_ingreso_laboral", "fecha_nacimiento"],
+    "DOCUMENTOS_RECHAZADOS": ["documentos"],
+    "DOCUMENTOS_VENCIDOS": ["documentos"],
+    "DOCUMENTO_DUPLICADO": ["numero_documento"],
+    "CORREO_DESECHABLE": ["email"],
+    "PATRIMONIO_NETO_NEGATIVO": ["patrimonio_activos", "patrimonio_pasivos"],
+    "TITULARIDAD_PROPIETARIO": ["propiedad"],
+    "SITUACION_JURIDICA_INMUEBLE": ["propiedad"],
+}
+
+
+def capa_consistencia(
+    solicitud: Solicitud,
+    canon_mensual: float | None = None,
+    documentos: list[DocumentoSolicitud] | None = None,
+) -> list[dict]:
+    """Relaciones entre datos: ingresos, deudas, empleador, fechas y documentos."""
+    entrada = _entrada_consistencia(solicitud, documentos or [], canon_mensual)
+    hallazgos: list[dict] = []
+    for hallazgo in ejecutar(entrada):
+        tipo_api = _TIPO_API[hallazgo.tipo]
+        hallazgos.append(nuevo_hallazgo(
+            tipo_api,
+            hallazgo.titulo,
+            hallazgo.detalle,
+            campos=_CAMPOS_POR_COMPROBACION.get(hallazgo.codigo_comprobacion, []),
+            codigo=hallazgo.codigo_comprobacion,
+            # El motor nuevo distingue el fraude confirmado (5) de la alerta (4).
+            severidad=max(hallazgo.severidad, FINDING_TIPOS[tipo_api]["severidad"]),
+            accion=hallazgo.accion_sugerida,
+        ))
     return hallazgos
 
 
@@ -364,7 +393,8 @@ def capa_reglas(
 ) -> list[dict]:
     hallazgos: list[dict] = []
     requeridos = documentos_requeridos(
-        solicitud.datos_laborales or {}, solicitud.garantias_referencias or {}, solicitud.vertical.value
+        solicitud.datos_laborales or {}, solicitud.garantias_referencias or {},
+        solicitud.vertical.value,
     )
     por_tipo: dict[str, DocumentoSolicitud] = {}
     for doc in documentos:
@@ -376,19 +406,8 @@ def capa_reglas(
         if doc is None or doc.estado == EstadoDocumento.pendiente:
             hallazgos.append(nuevo_hallazgo(
                 "DOC_INSUFICIENTE", f"Documento requerido sin cargar: {nombre}",
-                "El perfil del solicitante exige este documento y aún no ha sido cargado.", ["documentos"],
-            ))
-        elif doc.estado == EstadoDocumento.rechazado:
-            hallazgos.append(nuevo_hallazgo(
-                "DOC_INSUFICIENTE", f"Documento rechazado: {nombre}",
-                "El documento fue rechazado en revisión; requiere una nueva carga.", ["documentos"],
-            ))
-
-    for doc in documentos:
-        if doc.tipo_documento not in requeridos and doc.estado == EstadoDocumento.rechazado:
-            hallazgos.append(nuevo_hallazgo(
-                "DOC_INSUFICIENTE", f"Documento rechazado: {doc.tipo_documento.replace('_', ' ')}",
-                "El documento fue rechazado en revisión; requiere una nueva carga.", ["documentos"],
+                "El perfil del solicitante exige este documento y aún no ha sido cargado.",
+                ["documentos"], codigo="DOCUMENTO_REQUERIDO_SIN_CARGAR",
             ))
 
     if (
@@ -400,7 +419,8 @@ def capa_reglas(
         hallazgos.append(nuevo_hallazgo(
             "NO_VERIFICADO", "Decisión del motor desactualizada",
             "El expediente fue modificado después de la última ejecución del motor; "
-            "la decisión registrada no refleja los datos actuales.", ["evaluacion"],
+            "la decisión registrada no refleja los datos actuales.",
+            ["evaluacion"], codigo="DECISION_DESACTUALIZADA",
         ))
 
     return hallazgos
@@ -416,10 +436,12 @@ _CAMPOS_CALIDAD: list[tuple[str, str, tuple[str, str], list[str], float]] = [
     ("numero_documento", "Número de documento", ("datos_personales", "numero_documento"),
      ["cedula_ciudadania"], 1.5),
     ("ingresos_mensuales_fijos", "Ingresos fijos", ("datos_financieros", "ingresos_mensuales_fijos"),
-     ["desprendibles_pago_o_certificacion_laboral", "certificado_pension_vigente", "rut", "declaracion_renta"], 1.5),
+     ["desprendibles_pago_o_certificacion_laboral", "certificado_pension_vigente", "rut",
+      "declaracion_renta"], 1.5),
     ("ingresos_variables", "Ingresos variables", ("datos_financieros", "ingresos_variables"),
      ["extractos_bancarios_3_meses", "declaracion_renta"], 1.0),
-    ("gastos_mensuales_fijos", "Gastos mensuales", ("datos_financieros", "gastos_mensuales_fijos"), [], 1.0),
+    ("gastos_mensuales_fijos", "Gastos mensuales", ("datos_financieros", "gastos_mensuales_fijos"),
+     [], 1.0),
     ("empresa", "Empresa", ("datos_laborales", "empresa"),
      ["desprendibles_pago_o_certificacion_laboral"], 1.0),
     ("telefono", "Teléfono", ("datos_personales", "telefono"), [], 0.5),
@@ -444,12 +466,7 @@ _FUENTES = {
 def calidad_datos(
     solicitud: Solicitud, documentos: list[DocumentoSolicitud], hallazgos: list[dict]
 ) -> tuple[list[dict], float]:
-    secciones = {
-        "datos_personales": solicitud.datos_personales or {},
-        "datos_laborales": solicitud.datos_laborales or {},
-        "datos_financieros": solicitud.datos_financieros or {},
-        "garantias_referencias": solicitud.garantias_referencias or {},
-    }
+    secciones = _secciones(solicitud)
     estados_doc: dict[str, EstadoDocumento] = {}
     for doc in documentos:
         previo = estados_doc.get(doc.tipo_documento)
@@ -473,7 +490,8 @@ def calidad_datos(
         else:
             aprobado = any(estados_doc.get(t) == EstadoDocumento.aprobado for t in soportes)
             cargado = any(
-                estados_doc.get(t) in (EstadoDocumento.cargado, EstadoDocumento.aprobado) for t in soportes
+                estados_doc.get(t) in (EstadoDocumento.cargado, EstadoDocumento.aprobado)
+                for t in soportes
             )
             if aprobado:
                 estado = "verificado"
@@ -517,7 +535,7 @@ def validar_solicitud(
 ) -> dict:
     hallazgos = (
         capa_validacion(solicitud)
-        + capa_consistencia(solicitud, canon_mensual)
+        + capa_consistencia(solicitud, canon_mensual, documentos)
         + capa_reglas(solicitud, documentos, ultima_evaluacion)
     )
     hallazgos.sort(key=lambda h: -h["severidad"])
