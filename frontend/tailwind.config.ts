@@ -63,12 +63,23 @@ const config: Config = {
           from: { opacity: "0", transform: "scale(0.95)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(1rem)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "pulse-ring": {
+          "0%": { transform: "scale(0.9)", opacity: "0.7" },
+          "70%": { transform: "scale(1.6)", opacity: "0" },
+          "100%": { transform: "scale(1.6)", opacity: "0" },
+        },
       },
       animation: {
         "drawer-in": "drawer-in 0.28s cubic-bezier(.4,0,.2,1)",
         "overlay-in": "overlay-in 0.2s ease-out",
         "toast-in": "toast-in 0.25s cubic-bezier(.4,0,.2,1)",
         "modal-in": "modal-in 0.18s cubic-bezier(.4,0,.2,1)",
+        "fade-up": "fade-up 0.5s cubic-bezier(.16,1,.3,1) both",
+        "pulse-ring": "pulse-ring 2.4s cubic-bezier(.4,0,.6,1) infinite",
       },
     },
   },

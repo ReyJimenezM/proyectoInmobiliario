@@ -264,3 +264,42 @@ que son privados) — es una carpeta y un storage backend separados a propósito
 > características, subida real de una imagen, verificación de que se sirve públicamente,
 > reordenar y eliminar — todo confirmado con `curl` contra los contenedores reales, no solo
 > revisión estática de código.
+
+## Landing de captación (`/landing`)
+
+Página comercial para campañas, con doble audiencia: el selector del hero cambia el mensaje
+entre **inmobiliaria** y **persona que busca vivienda**, y ese mismo perfil configura los
+campos del formulario al final de la página.
+
+Es una ruta independiente de la vitrina (`app/landing/page.tsx`), con su propio header y
+footer. La mayor parte es Server Component: solo son cliente el selector del hero, la
+calculadora de ahorro y el formulario. No carga imágenes remotas — el hero es CSS puro — y
+el script de Calendly se descarga **solo después** de enviar el formulario, para no pagarlo
+en la primera carga.
+
+### Configuración
+
+Copia `frontend/.env.local.example` a `frontend/.env.local` y llena:
+
+| Variable | Para qué |
+|---|---|
+| `NEXT_PUBLIC_CALENDLY_URL` | Enlace del evento de Calendly. Si queda vacío, el formulario sigue recibiendo leads y solo muestra "te contactamos". |
+| `NEXT_PUBLIC_CONTACTO_WHATSAPP` / `NEXT_PUBLIC_CONTACTO_EMAIL` | Contactos de respaldo si Calendly no está configurado o falla. |
+| `LEADS_WEBHOOK_URL` | CRM / Zapier / Make / n8n al que se reenvía cada lead (opcional). |
+| `LEADS_FILE` | Respaldo local en JSONL. Por defecto `storage/leads/leads.jsonl` relativo al directorio desde donde corre Next. |
+
+Al enviar el formulario se hace `POST /api/leads` (route handler de Next, no del backend
+FastAPI: la landing debe poder capturar leads aunque el backend esté caído). El handler
+valida con zod, descarta bots por honeypot, limita por IP y guarda en el webhook **y** en el
+archivo — le basta con que uno de los dos funcione. Si Calendly está configurado, el widget
+aparece con nombre, correo y teléfono ya prellenados en la URL, y cuando la persona agenda
+se registra un segundo evento (`{lead_id, evento: "agendado"}`) en el mismo destino.
+
+Los leads capturados aún **no** llegan al módulo `/admin/leads`, que hoy trabaja con los
+datos de demostración de `lib/demo.ts`. Conectarlos requiere tabla y endpoint en el backend.
+
+> Nota: probado en el navegador contra `next dev` — render de la página, cambio de perfil,
+> validación del formulario, `POST /api/leads` en 200 con el JSONL escrito, montaje del
+> widget de Calendly con el prefill en la URL y ausencia de scroll horizontal en móvil.
+> `next build` pasa limpio: `/landing` se prerenderiza como estática y `/api/leads` queda
+> como ruta dinámica.
