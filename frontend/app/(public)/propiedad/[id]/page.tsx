@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { obtenerPropiedad } from "@/lib/api";
 import { ETIQUETAS_OPERACION, ETIQUETAS_TIPO_PROPIEDAD, formatoArea, formatoMoneda } from "@/lib/format";
@@ -96,12 +97,39 @@ export default async function PropiedadPage({ params }: PageProps) {
           </div>
         </div>
 
-        <div className="lg:sticky lg:top-24 lg:h-fit">
+        <div className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
           {propiedad.simulador_activo ? (
             <SimuladorWidget propiedad={propiedad} />
           ) : (
             <div className="card p-6 text-sm text-ink-500">
               Esta propiedad no tiene el simulador de crédito activado.
+            </div>
+          )}
+
+          {/* Para arriendo, el simulador es el gancho gratuito y la autoconsulta es el estudio
+              completo: el paso donde se cobra y se consulta la central de riesgo. */}
+          {propiedad.operacion === "arriendo" && (
+            <div className="card p-6">
+              <h2 className="font-display text-lg font-semibold text-ink-900">¿Calificas para arrendarlo?</h2>
+              <p className="mt-1.5 text-sm text-ink-500">
+                Haz el estudio completo en minutos y recibe tu resultado con explicación: aprobado, aprobado con
+                condiciones, en estudio o con codeudor.
+              </p>
+              <Link
+                href={{
+                  pathname: "/autoconsulta",
+                  query: {
+                    propiedad_id: propiedad.id,
+                    titulo: propiedad.titulo,
+                    canon: propiedad.precio,
+                    ciudad: propiedad.ciudad,
+                    tipo: ETIQUETAS_TIPO_PROPIEDAD[propiedad.tipo] ?? propiedad.tipo,
+                  },
+                }}
+                className="btn-primary mt-4 w-full"
+              >
+                Consulta si calificas
+              </Link>
             </div>
           )}
         </div>

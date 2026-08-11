@@ -6,7 +6,7 @@ const ENLACES_MENU = [
   { href: "/arriendo/apartamento/bogota", label: "Arrendar" },
   { href: "/proyectos", label: "Proyectos" },
   { href: "/simulador", label: "Simulador" },
-  { href: "/blog", label: "Blog" },
+  { href: "/autoconsulta", label: "Consulta si calificas" },
 ];
 
 export function Header() {

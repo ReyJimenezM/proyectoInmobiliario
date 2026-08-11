@@ -10,3 +10,4 @@ storage/documentos/*
 *.egg-info/
 .pytest_cache/
 .claude/
+*.tsbuildinfo
