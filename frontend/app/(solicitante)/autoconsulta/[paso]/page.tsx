@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { ProgresoAutoconsulta } from "@/components/autoconsulta/ProgresoAutoconsulta";
 import { PasoInicio } from "@/components/autoconsulta/PasoInicio";
 import { PasoPersonales } from "@/components/autoconsulta/PasoPersonales";
@@ -38,7 +38,8 @@ const COMPONENTES = [
   PasoResultado,
 ];
 
-export default function PasoAutoconsultaPage({ params }: { params: { paso: string } }) {
+export default function PasoAutoconsultaPage(props: { params: Promise<{ paso: string }> }) {
+  const params = use(props.params);
   const router = useRouter();
   const { toast } = useToast();
   const definicion = pasoPorSlug(params.paso);

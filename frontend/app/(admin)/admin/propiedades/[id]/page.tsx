@@ -1,20 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { actualizarPropiedadAdmin, actualizarRiesgoPropiedad, obtenerPropiedadAdmin } from "@/lib/api";
 import { PROP_COMPS, type PropiedadDetail } from "@/lib/types";
 import { GestorImagenesPropiedad } from "@/components/admin/GestorImagenesPropiedad";
 import { EditorRiesgo } from "@/components/admin/EditorRiesgo";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const TIPOS = ["apartamento", "casa", "apartaestudio", "oficina", "local", "lote", "bodega"] as const;
 const ESTADOS = ["activo", "pausado", "arrendado", "vendido"] as const;
 
-export default function EditarPropiedadPage({ params }: PageProps) {
+export default function EditarPropiedadPage(props: PageProps) {
+  const params = use(props.params);
   const [propiedad, setPropiedad] = useState<PropiedadDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);

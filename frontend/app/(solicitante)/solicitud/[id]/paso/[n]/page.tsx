@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { obtenerSolicitud } from "@/lib/api";
 import { estaAutenticado } from "@/lib/auth";
 import type { SolicitudOut } from "@/lib/types";
@@ -14,10 +14,11 @@ import { PasoDocumentos } from "@/components/solicitud/PasoDocumentos";
 import { PasoRevisionEnvio } from "@/components/solicitud/PasoRevisionEnvio";
 
 interface PageProps {
-  params: { id: string; n: string };
+  params: Promise<{ id: string; n: string }>;
 }
 
-export default function PasoSolicitudPage({ params }: PageProps) {
+export default function PasoSolicitudPage(props: PageProps) {
+  const params = use(props.params);
   const router = useRouter();
   const pasoActual = Math.min(Math.max(Number(params.n) || 1, 1), NOMBRES_PASOS.length);
   const [solicitud, setSolicitud] = useState<SolicitudOut | null>(null);

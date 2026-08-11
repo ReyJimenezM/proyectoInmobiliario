@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { obtenerResultadoSolicitud } from "@/lib/api";
 import { estaAutenticado } from "@/lib/auth";
 import { ScoreGauge } from "@/components/ui/ScoreGauge";
 import type { ResultadoSolicitudOut } from "@/lib/types";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const CONFIG_ESTADO: Record<string, { icono: string; titulo: string; bg: string; texto: string }> = {
@@ -61,7 +61,8 @@ function nivelScore(score: number, max: number) {
   return { label: "Riesgo crítico", color: "text-rose-600", bg: "bg-rose-50" };
 }
 
-export default function ResultadoSolicitudPage({ params }: PageProps) {
+export default function ResultadoSolicitudPage(props: PageProps) {
+  const params = use(props.params);
   const router = useRouter();
   const [resultado, setResultado] = useState<ResultadoSolicitudOut | null>(null);
   const [error, setError] = useState<string | null>(null);

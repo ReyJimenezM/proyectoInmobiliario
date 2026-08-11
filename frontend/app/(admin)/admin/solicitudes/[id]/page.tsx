@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import {
   abrirDocumento,
   agregarComentarioAdmin,
@@ -32,7 +32,7 @@ import type {
 } from "@/lib/types";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -201,7 +201,8 @@ function BloqueDatos({ titulo, datos }: { titulo: string; datos: Record<string, 
 /*  Page                                                                */
 /* ================================================================== */
 
-export default function DetalleSolicitudAdminPage({ params }: PageProps) {
+export default function DetalleSolicitudAdminPage(props: PageProps) {
+  const params = use(props.params);
   const [solicitud, setSolicitud] = useState<SolicitudOut | null>(null);
   const [resultado, setResultado] = useState<ResultadoSolicitudOut | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoOut[]>([]);

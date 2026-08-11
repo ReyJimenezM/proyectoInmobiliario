@@ -9,11 +9,12 @@ import { Pagination } from "@/components/listados/Pagination";
 import type { Operacion, TipoPropiedad } from "@/lib/types";
 
 interface PageProps {
-  params: { operacion: string; tipo: string; ciudad: string; barrio?: string[] };
-  searchParams: Record<string, string | undefined>;
+  params: Promise<{ operacion: string; tipo: string; ciudad: string; barrio?: string[] }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }
 
-export function generateMetadata({ params }: PageProps): Metadata {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   const ciudad = nombreCiudadDesdeSlug(params.ciudad);
   const tipo = ETIQUETAS_TIPO_PROPIEDAD[params.tipo] ?? params.tipo;
   const operacion = ETIQUETAS_OPERACION[params.operacion] ?? params.operacion;
@@ -23,7 +24,9 @@ export function generateMetadata({ params }: PageProps): Metadata {
   };
 }
 
-export default async function ListadoPage({ params, searchParams }: PageProps) {
+export default async function ListadoPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const ciudad = nombreCiudadDesdeSlug(params.ciudad);
   const barrio = params.barrio?.[0];
   const pagina = Number(searchParams.pagina ?? "1");

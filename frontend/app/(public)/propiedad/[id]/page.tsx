@@ -7,10 +7,11 @@ import { Gallery } from "@/components/propiedad/Gallery";
 import { SimuladorWidget } from "@/components/simulador/SimuladorWidget";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   try {
     const propiedad = await obtenerPropiedad(params.id);
     return {
@@ -31,7 +32,8 @@ const CARACTERISTICAS_LABELS: Record<string, (p: Awaited<ReturnType<typeof obten
   Administración: (p) => (p.valor_admin ? formatoMoneda(p.valor_admin) : null),
 };
 
-export default async function PropiedadPage({ params }: PageProps) {
+export default async function PropiedadPage(props: PageProps) {
+  const params = await props.params;
   let propiedad;
   try {
     propiedad = await obtenerPropiedad(params.id);
