@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-sand-50 text-ink-900 antialiased;
   }
@@ -11,6 +15,26 @@
   h2,
   h3 {
     @apply font-display;
+  }
+
+  /* Safari dibuja su propio triángulo en <summary> aunque tenga list-style: none. */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* Quien pide menos movimiento en su sistema operativo no debería ver ninguno. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
