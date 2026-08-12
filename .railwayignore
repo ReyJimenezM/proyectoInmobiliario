@@ -1,0 +1,13 @@
+# Lo que no tiene que viajar a Railway al hacer `railway up`. El build dentro del
+# contenedor reinstala dependencias, asi que subir node_modules/.venv solo hace lento
+# el despliegue. Espeja .dockerignore.
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/.next
+.git
+storage/documentos/*
+storage/propiedades/*
+storage/leads/*

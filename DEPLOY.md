@@ -1,5 +1,31 @@
 # Guia de Despliegue - Plataforma Inmobiliaria
 
+## Donde esta desplegado hoy (Railway)
+
+| Entorno | Proyecto | Servicios | URL |
+|---|---|---|---|
+| Produccion | `HabitatRisk` | frontend, backend, postgres | https://frontend-production-8578.up.railway.app |
+| | | | Backend: https://backend-production-24f2c.up.railway.app |
+| Pruebas | `plataforma-inmobiliaria` | backend, postgres | https://backend-production-2d267.up.railway.app |
+
+**Produccion se despliega sola con cada push a `master`**: los servicios estan conectados al
+repositorio de GitHub, asi que fusionar un PR basta para publicar. El backend corre
+`alembic upgrade head` al arrancar (ver `backend/Dockerfile`), asi que las migraciones se
+aplican en cada despliegue sin pasos manuales.
+
+La landing de captacion vive en `/landing` y **no esta enlazada** desde el header ni el
+footer, a proposito: se llega por campana, correo o QR. Acepta parametros UTM, que quedan
+guardados con el lead:
+`https://frontend-production-8578.up.railway.app/landing?utm_source=meta&utm_campaign=agosto`
+
+El entorno de pruebas solo tiene backend y base de datos: el plan gratuito de Railway no
+deja provisionar un tercer servicio en el workspace. Sirve para apuntar un frontend local
+contra el (`NEXT_PUBLIC_API_URL=https://backend-production-2d267.up.railway.app`), que
+funciona sin tocar CORS porque el backend ya permite `http://localhost:3000`.
+
+El directorio del repositorio esta enlazado al proyecto **de pruebas**, no al de produccion:
+asi un `railway up` accidental no publica nada. Produccion se toca por git, no por CLI.
+
 ## Variables de Entorno Requeridas
 
 Todas las opciones de despliegue necesitan estas variables:
