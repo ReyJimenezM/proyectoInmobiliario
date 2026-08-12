@@ -11,6 +11,7 @@ from app.models.documento_solicitud import DocumentoSolicitud
 from app.models.evaluacion import Evaluacion
 from app.models.decision_manual import DecisionManual
 from app.models.auditoria import Auditoria
+from app.models.lead import Lead
 from app.models.simulacion import Simulacion
 from app.models.comentario_solicitud import ComentarioSolicitud
 from app.models.configuracion_operativa import ConfiguracionOperativa
@@ -40,6 +41,7 @@ __all__ = [
     "Evaluacion",
     "DecisionManual",
     "Auditoria",
+    "Lead",
     "Simulacion",
     "ComentarioSolicitud",
     "ConfiguracionOperativa",

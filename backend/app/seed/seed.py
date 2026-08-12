@@ -21,6 +21,7 @@ from app.models import (
     DocumentoSolicitud,
     Evaluacion,
     DecisionManual,
+    Lead,
     MotorDecisionConfig,
 )
 from motor_decision.robusto import MOTOR_DEFAULT
@@ -35,6 +36,8 @@ from app.models.enums import (
     EstadoDocumento,
     DecisionEvaluacion,
     DecisionManual as DecisionManualEnum,
+    EstadoLead,
+    TipoLead,
 )
 
 DEFAULT_TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")  # creado en la migracion 0003
@@ -594,6 +597,45 @@ def run(db: Session) -> None:
                     ),
                     comentario="Revisado manualmente, documentación consistente con lo declarado.",
                 ))
+
+    # --- leads de ejemplo (los reales entran por la landing, POST /api/leads) ---
+    # Uno queda sin inmobiliaria a proposito: es la bandeja compartida de la plataforma,
+    # visible para todos los tenants hasta que alguien lo gestione.
+    ahora = datetime.now(timezone.utc)
+    db.add_all([
+        Lead(
+            id=uuid.uuid4(), codigo="LD-A1B2C3D4", inmobiliaria_id=DEFAULT_TENANT_ID,
+            tipo=TipoLead.inmobiliaria, nombre="Carolina Restrepo",
+            correo="carolina@arrendamientosdelsur.co", telefono="3009998877",
+            empresa="Arrendamientos del Sur", ciudad="Cali", inmuebles="101 - 500",
+            mensaje="Administramos 300 inmuebles y el estudio nos toma 4 días.",
+            origen="landing-inmobiliaria", utm_source="google", utm_campaign="agosto",
+            pagina="/landing", estado=EstadoLead.en_gestion, asesor="Pedro Ríos (Asesor comercial)",
+            nota="Enviada propuesta comercial, pendiente de respuesta.",
+            agendado_en=ahora - timedelta(days=1),
+            creado_en=ahora - timedelta(days=3), ultima_gestion=ahora - timedelta(days=1),
+        ),
+        Lead(
+            id=uuid.uuid4(), codigo="LD-B2C3D4E5", inmobiliaria_id=DEFAULT_TENANT_ID,
+            tipo=TipoLead.arrendatario, nombre="Andrés Felipe Muñoz",
+            correo="af.munoz@correo.com", telefono="3001122334", ciudad="Bogotá",
+            interes="Tomar un inmueble en arriendo",
+            mensaje="Soy independiente, quiero saber si califico.",
+            origen="landing-persona", utm_source="meta", utm_campaign="agosto-arriendo",
+            pagina="/landing", estado=EstadoLead.contactado, asesor="Pedro Ríos (Asesor comercial)",
+            nota="Se le explicó la ruta con codeudor.",
+            creado_en=ahora - timedelta(days=2), ultima_gestion=ahora - timedelta(days=1),
+        ),
+        Lead(
+            id=uuid.uuid4(), codigo="LD-C3D4E5F6", inmobiliaria_id=None,
+            tipo=TipoLead.propietario, nombre="Gloria Elena Sáenz",
+            correo="gsaenz@correo.com", telefono="3189900112", ciudad="Medellín",
+            interes="Poner mi inmueble en arriendo",
+            origen="landing-persona", utm_campaign="agosto-arriendo", pagina="/landing",
+            estado=EstadoLead.nuevo,
+            creado_en=ahora - timedelta(hours=6), ultima_gestion=ahora - timedelta(hours=6),
+        ),
+    ])
 
     db.commit()
     print("Seed completado.")
