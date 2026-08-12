@@ -442,3 +442,65 @@ export interface AuditoriaListOut {
   pagina: number;
   tamano_pagina: number;
 }
+
+/* --- Leads / CRM -------------------------------------------------------- */
+// Se llaman `...Crm` para no chocar con el `Lead` de `lib/demo.ts`, que sigue
+// alimentando el portal del propietario con datos de demostración.
+
+export type EstadoLeadCrm = "nuevo" | "contactado" | "en_gestion" | "calificado" | "ganado" | "perdido";
+export type TipoLeadCrm = "inmobiliaria" | "arrendatario" | "propietario";
+
+export const ESTADOS_LEAD_CRM: { clave: EstadoLeadCrm; titulo: string }[] = [
+  { clave: "nuevo", titulo: "Nuevo" },
+  { clave: "contactado", titulo: "Contactado" },
+  { clave: "en_gestion", titulo: "En gestión" },
+  { clave: "calificado", titulo: "Calificado" },
+  { clave: "ganado", titulo: "Ganado" },
+  { clave: "perdido", titulo: "Perdido" },
+];
+
+export interface LeadCrm {
+  id: string;
+  codigo: string;
+  inmobiliaria_id: string | null;
+  tipo: TipoLeadCrm;
+  nombre: string;
+  correo: string;
+  telefono: string;
+  empresa: string | null;
+  ciudad: string | null;
+  inmuebles: string | null;
+  interes: string | null;
+  mensaje: string | null;
+  origen: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  pagina: string | null;
+  estado: EstadoLeadCrm;
+  asesor: string | null;
+  nota: string | null;
+  agendado_en: string | null;
+  creado_en: string;
+  ultima_gestion: string;
+}
+
+export interface LeadsResumen {
+  total: number;
+  activos: number;
+  ganados: number;
+  cerrados: number;
+  sin_asignar: number;
+  agendados: number;
+}
+
+export interface LeadsListaOut {
+  leads: LeadCrm[];
+  resumen: LeadsResumen;
+}
+
+export interface LeadActualizarInput {
+  estado?: EstadoLeadCrm;
+  asesor?: string;
+  nota?: string;
+}

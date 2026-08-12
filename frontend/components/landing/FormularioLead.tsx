@@ -66,6 +66,9 @@ export function FormularioLead() {
   const [enviando, setEnviando] = useState(false);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [leadId, setLeadId] = useState<string | null>(null);
+  //: Identificador interno del lead en el backend. Es lo que permite marcarlo como
+  //: agendado; queda en null si el backend no respondió y el lead solo se guardó local.
+  const [leadUuid, setLeadUuid] = useState<string | null>(null);
   const [agendado, setAgendado] = useState(false);
   const [utm, setUtm] = useState<Pick<LeadInput, "utm_source" | "utm_medium" | "utm_campaign" | "pagina">>({});
   const idBase = useId();
@@ -118,6 +121,7 @@ export function FormularioLead() {
       const cuerpo = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         id?: string;
+        uuid?: string | null;
         error?: string;
         errores?: ErroresLead;
       };
@@ -128,6 +132,7 @@ export function FormularioLead() {
         return;
       }
 
+      setLeadUuid(cuerpo.uuid ?? null);
       setLeadId(cuerpo.id ?? "");
     } catch {
       setErrorGeneral("Se cayó la conexión antes de enviar. Revisa tu internet e inténtalo de nuevo.");
@@ -138,12 +143,12 @@ export function FormularioLead() {
 
   function marcarAgendado() {
     setAgendado(true);
-    if (!leadId) return;
+    if (!leadUuid) return;
     // Best-effort: si falla, la reunión ya quedó en Calendly de todas formas.
     void fetch("/api/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lead_id: leadId, evento: "agendado" }),
+      body: JSON.stringify({ lead_id: leadUuid, evento: "agendado" }),
     }).catch(() => undefined);
   }
 

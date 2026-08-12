@@ -13,6 +13,9 @@ import type {
   ImagenPropiedad,
   Inmobiliaria,
   InmobiliariaCrearInput,
+  LeadActualizarInput,
+  LeadsListaOut,
+  LeadCrm,
   LoginInput,
   MotorDecisionConfig,
   MotorDecisionCrearInput,
@@ -554,4 +557,25 @@ export interface ValidacionSolicitudOut {
 
 export function validarSolicitudAdmin(solicitudId: string): Promise<ValidacionSolicitudOut> {
   return fetchAutenticado(`/api/admin/solicitudes/${solicitudId}/validacion`);
+}
+
+// --- Leads / CRM ---
+export function listarLeadsAdmin(filtros: {
+  estado?: string;
+  tipo?: string;
+  q?: string;
+} = {}): Promise<LeadsListaOut> {
+  const params = new URLSearchParams();
+  Object.entries(filtros).forEach(([clave, valor]) => {
+    if (valor) params.set(clave, valor);
+  });
+  const qs = params.toString();
+  return fetchAutenticado<LeadsListaOut>(`/api/admin/leads${qs ? `?${qs}` : ""}`);
+}
+
+export function actualizarLeadAdmin(leadId: string, payload: LeadActualizarInput): Promise<LeadCrm> {
+  return fetchAutenticado<LeadCrm>(`/api/admin/leads/${leadId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }

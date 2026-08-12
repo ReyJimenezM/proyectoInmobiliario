@@ -81,3 +81,26 @@ class DecisionManual(str, enum.Enum):
     aprobada = "aprobada"
     rechazada = "rechazada"
     solicitar_info = "solicitar_info"
+
+
+class TipoLead(str, enum.Enum):
+    """Quien deja sus datos. La landing captura un perfil mas grueso (inmobiliaria o
+    persona); cuando es persona, el interes que marco decide si entra al CRM como
+    arrendatario o como propietario."""
+
+    inmobiliaria = "inmobiliaria"
+    arrendatario = "arrendatario"
+    propietario = "propietario"
+
+
+class EstadoLead(str, enum.Enum):
+    nuevo = "nuevo"
+    contactado = "contactado"
+    en_gestion = "en_gestion"
+    calificado = "calificado"
+    ganado = "ganado"
+    perdido = "perdido"
+
+
+#: Estados que cierran el lead: ya no cuentan como pipeline activo.
+ESTADOS_LEAD_CERRADOS = (EstadoLead.ganado, EstadoLead.perdido)

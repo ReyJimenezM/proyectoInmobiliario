@@ -50,6 +50,11 @@ requiere_super_admin = requiere_roles(RolUsuario.super_admin)
 # Branding/marca es informacion sensible (NIT, contacto legal) -- solo el admin del tenant
 # o super_admin pueden editarla, no analista/asesor/consulta.
 requiere_admin_tenant = requiere_roles(RolUsuario.super_admin, RolUsuario.admin)
+# Gestion comercial (CRM de leads): el asesor SI trabaja aqui, a diferencia de las
+# decisiones de credito. "consulta" queda fuera: es solo lectura.
+requiere_gestion_comercial = requiere_roles(
+    RolUsuario.super_admin, RolUsuario.admin, RolUsuario.analista, RolUsuario.asesor
+)
 
 
 # --- Aislamiento entre inmobiliarias -------------------------------------------------

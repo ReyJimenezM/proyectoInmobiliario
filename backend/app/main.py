@@ -21,6 +21,7 @@ from app.api import (
     catalogos,
     documentos,
     inmobiliarias,
+    leads,
     motor,
     parametrizacion,
     propiedades,
@@ -282,6 +283,8 @@ app.include_router(parametrizacion.router)
 app.include_router(requisitos.router)
 app.include_router(validacion.router)
 app.include_router(trazabilidad.router)
+app.include_router(leads.router)
+app.include_router(leads.router_admin)
 
 
 @app.get("/api/health")

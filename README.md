@@ -288,18 +288,48 @@ Copia `frontend/.env.local.example` a `frontend/.env.local` y llena:
 | `LEADS_WEBHOOK_URL` | CRM / Zapier / Make / n8n al que se reenvía cada lead (opcional). |
 | `LEADS_FILE` | Respaldo local en JSONL. Por defecto `storage/leads/leads.jsonl` relativo al directorio desde donde corre Next. |
 
-Al enviar el formulario se hace `POST /api/leads` (route handler de Next, no del backend
-FastAPI: la landing debe poder capturar leads aunque el backend esté caído). El handler
-valida con zod, descarta bots por honeypot, limita por IP y guarda en el webhook **y** en el
-archivo — le basta con que uno de los dos funcione. Si Calendly está configurado, el widget
-aparece con nombre, correo y teléfono ya prellenados en la URL, y cuando la persona agenda
-se registra un segundo evento (`{lead_id, evento: "agendado"}`) en el mismo destino.
+Al enviar el formulario se hace `POST /api/leads` (route handler de Next, no directo al
+backend: la landing debe poder capturar leads aunque el backend esté caído). El handler
+valida con zod, descarta bots por honeypot, limita por IP y reparte el lead a tres destinos
+—backend, webhook y archivo—, dándolo por recibido si al menos uno responde. Si Calendly
+está configurado, el widget aparece con nombre, correo y teléfono ya prellenados en la URL,
+y cuando la persona agenda se registra el evento correspondiente.
 
-Los leads capturados aún **no** llegan al módulo `/admin/leads`, que hoy trabaja con los
-datos de demostración de `lib/demo.ts`. Conectarlos requiere tabla y endpoint en el backend.
+### Del formulario al CRM
+
+Los leads llegan al módulo `/admin/leads`, que consume la API real:
+
+| Endpoint | Quién | Para qué |
+|---|---|---|
+| `POST /api/leads` | Público | Lo llama el route handler de Next con lo que capturó la landing. Devuelve `{id, codigo}`; el código (`LD-XXXXXXXX`) es el radicado que ve la persona. |
+| `POST /api/leads/{id}/agendado` | Público | Marca la reunión confirmada por Calendly. Es idempotente y solo lo puede llamar quien tenga el UUID, que no se expone en la página. |
+| `GET /api/admin/leads` | Staff | Listado con filtros (`estado`, `tipo`, `q`) y el resumen del tablero calculado sobre ese mismo filtro. |
+| `PATCH /api/admin/leads/{id}` | Staff sin `consulta` | Cambia estado, asesor y nota. Cada gestión queda en `auditoria` con el valor anterior. |
+
+La landing captura un perfil grueso (inmobiliaria o persona) y el backend deriva el tipo con
+el que trabaja el CRM: una persona que marca "Poner mi inmueble en arriendo" entra como
+**propietario**, y el resto como **arrendatario**.
+
+**Regla de tenant, distinta al resto de la aplicación:** la landing pública no sabe a qué
+inmobiliaria pertenece quien deja sus datos, así que el lead nace sin `inmobiliaria_id`.
+Los leads sin asignar son una bandeja compartida que ve todo el staff; en cuanto alguien los
+gestiona quedan asignados a su inmobiliaria y desaparecen para las demás. Un lead ya
+asignado a otro tenant responde 404, no 403 (un 403 confirmaría que existe). Una landing
+white-label puede saltarse la bandeja mandando `inmobiliaria_id` en el POST.
+
+El portal del propietario (`/propietario/leads`) sigue con los datos de demostración de
+`lib/demo.ts`; el que quedó conectado a la base de datos es el CRM del backoffice.
 
 > Nota: probado en el navegador contra `next dev` — render de la página, cambio de perfil,
 > validación del formulario, `POST /api/leads` en 200 con el JSONL escrito, montaje del
 > widget de Calendly con el prefill en la URL y ausencia de scroll horizontal en móvil.
 > `next build` pasa limpio: `/landing` se prerenderiza como estática y `/api/leads` queda
 > como ruta dinámica.
+>
+> El circuito completo landing → backend → CRM se probó contra PostgreSQL real (sobre una
+> base desechable, no la del stack de docker): cuatro leads enviados desde el formulario, el
+> tipo derivado correctamente en cada caso, el agendamiento marcado, el cambio de estado,
+> asesor y nota persistido, y el lead reclamado por la inmobiliaria que lo gestionó. La
+> migración `0015` se verificó con `upgrade head` → `downgrade 0014` → `upgrade head`,
+> comprobando que el downgrade no deja tipos enum huérfanos, y el seed corrió completo sobre
+> una base limpia. 322 pruebas de backend en verde, 17 de ellas nuevas para leads.
